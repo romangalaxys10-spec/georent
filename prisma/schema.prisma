@@ -1,0 +1,97 @@
+// Prisma schema — korter.ge deal-alerts app (Task 1: data layer)
+// SQLite + prisma-client-js. Arrays are stored as JSON strings
+// (Prisma primitive lists are not supported on SQLite).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A user-defined price watcher over korter.ge listings.
+model Alert {
+  id          String   @id @default(cuid())
+  name        String
+  minPrice    Int?
+  maxPrice    Int?
+  cityId      Int      @default(1) // korter geo id (1=Tbilisi, 2=Batumi)
+  districtIds String   @default("[]") // JSON string array of korter district ids
+  roomCounts  String   @default("[]") // JSON string array of room counts
+  minArea     Float?
+  maxArea     Float?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  notifications NotificationRecord[]
+}
+
+// Snapshot of every korter listing we have ever seen, deduped on objectId.
+model Listing {
+  objectId     Int      @id
+  price        Float
+  currency     String   @default("USD")
+  area         Float
+  roomCount    Int
+  actualizeTime DateTime
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  lastPrice    Float
+  minPriceSeen Float
+  priceDrops   Int      @default(0)
+  cityId       Int
+  districtId   Int?
+  districtName String?
+  address      String?
+  buildingName String?
+  lat          Float?
+  lng          Float?
+  floor        Int?
+  floorCount   Int?
+  image        String?
+  link         String
+  ppsm         Float
+  isSold       Boolean  @default(false)
+  raw          String // full source JSON stringified
+
+  notifications NotificationRecord[]
+
+  @@index([cityId, districtId])
+  @@index([actualizeTime])
+}
+
+// One row per generated notification (in-app feed + scanner dedup).
+model NotificationRecord {
+  id            String    @id @default(cuid())
+  alertId       String?
+  objectId      Int
+  kind          String // "NEW" | "PRICE_DROP" | "BUMP"
+  price         Float
+  previousPrice Float?
+  title         String
+  createdAt     DateTime  @default(now())
+  readAt        DateTime?
+
+  alert   Alert?  @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  listing Listing @relation(fields: [objectId], references: [objectId], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([alertId, readAt])
+}
+
+// Rolling ppsm percentiles per district (shrinkage target for deal scores).
+model DistrictStat {
+  id          String   @id @default(cuid())
+  cityId      Int
+  districtId  Int?
+  sampleCount Int
+  p10         Float
+  p25         Float
+  p50         Float
+  updatedAt   DateTime @updatedAt
+
+  @@unique([cityId, districtId])
+}

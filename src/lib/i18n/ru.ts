@@ -1,0 +1,117 @@
+import type { Dictionary } from './types';
+
+/**
+ * Russian (Русский) dictionary.
+ *
+ * Keys are locked to the English source of truth via `Dictionary` — missing
+ * or extra keys fail `tsc`. Placeholders like {n} / {total} are filled at
+ * render time by simple string replacement; keep them verbatim.
+ * Parity is re-checked at runtime by `scripts/check-i18n.ts`.
+ */
+export const dict: Dictionary = {
+  'app.name': 'DealRadar Georgia',
+  'app.tagline': 'Узнавайте о лучших предложениях по квартирам в Грузии раньше всех',
+
+  'nav.explore': 'Поиск',
+  'nav.alerts': 'Оповещения',
+  'nav.feed': 'Уведомления',
+  'nav.sources': 'Источники',
+
+  'hero.title': 'Будьте на шаг впереди на рынке недвижимости Грузии',
+  'hero.subtitle':
+    'Онлайн-мониторинг новых объявлений и снижения цен на korter.ge — по вашим критериям, в ту же секунду, когда они появляются.',
+  'hero.cta': 'Создайте первое оповещение',
+  'hero.browse': 'Смотреть актуальные объявления',
+
+  'filters.title': 'Параметры поиска',
+  'filters.budget': 'Бюджет (USD)',
+  'filters.from': 'От',
+  'filters.to': 'До',
+  'filters.city': 'Город',
+  'filters.districts': 'Районы',
+  'filters.anyDistrict': 'Любой район',
+  'filters.rooms': 'Комнаты',
+  'filters.anyRooms': 'Любое',
+  'filters.area': 'Площадь (м²)',
+  'filters.apply': 'Применить',
+  'filters.reset': 'Сбросить',
+  'filters.sort': 'Сортировка',
+  'filters.sortNewest': 'Сначала новые',
+  'filters.sortCheapest': 'Сначала дешёвые',
+  'filters.sortPriceDrop': 'Лучший рейтинг выгодности',
+  'filters.sortPpsm': 'Цена за м²',
+
+  'listing.new': 'НОВОЕ',
+  'listing.priceDrop': 'Снижение цены',
+  'listing.bumped': 'Поднято',
+  'listing.perm2': '/м²',
+  'listing.view': 'Открыть на Korter',
+  'listing.floor': 'Этаж {n}/{total}',
+  'listing.dealScore': 'Рейтинг выгодности',
+  'listing.scoreExcellent': 'Отлично',
+  'listing.scoreGood': 'Хорошо',
+  'listing.scoreFair': 'Средне',
+  'listing.scorePricey': 'Дорого',
+  'listing.warmingUp': 'Набираем данные',
+  'listing.studio': 'Студия',
+
+  'alerts.create': 'Создать оповещение',
+  'alerts.edit': 'Редактировать оповещение',
+  'alerts.name': 'Название оповещения',
+  'alerts.namePlaceholder': 'напр. Ваке, 2-комн., до $90 тыс.',
+  'alerts.myAlerts': 'Мои оповещения',
+  'alerts.none': 'Пока нет оповещений — создайте одно и начните ловить выгодные предложения',
+  'alerts.delete': 'Удалить',
+  'alerts.confirmDelete': 'Удалить это оповещение?',
+  'alerts.active': 'Активно',
+  'alerts.paused': 'На паузе',
+  'alerts.matches': 'совпадений',
+  'alerts.pause': 'Пауза',
+  'alerts.resume': 'Возобновить',
+  'alerts.notifyBrowser': 'Уведомления браузера',
+  'alerts.notifySound': 'Звук',
+  'alerts.saved': 'Оповещение сохранено',
+  'alerts.deleted': 'Оповещение удалено',
+
+  'feed.title': 'Уведомления в реальном времени',
+  'feed.markAllRead': 'Отметить всё прочитанным',
+  'feed.empty': 'Пока ничего нет. Когда объявление совпадёт с вашим оповещением, оно появится здесь первым.',
+  'feed.justNow': 'только что',
+  'feed.minAgo': '{n} мин. назад',
+  'feed.hourAgo': '{n} ч. назад',
+  'feed.dayAgo': '{n} дн. назад',
+  'feed.newMatch': 'Новое совпадение',
+  'feed.priceDropMatch': 'Снижение цены',
+
+  'sources.title': 'Источники данных',
+  'sources.korter': 'korter.ge — живой официальный JSON API',
+  'sources.ssge': 'ss.ge — недоступен (защита от ботов)',
+  'sources.myhome': 'myhome.ge — недоступен (защита от ботов)',
+  'sources.note':
+    'Мы показываем только то, что можем проверить. Другие источники подключатся к тому же радару, как только станут доступны.',
+
+  'alerts.scanNow': 'Сканировать сейчас',
+  'alerts.scanTriggered': 'Сканирование запущено — новые совпадения появятся через несколько секунд',
+  'alerts.invalidName': 'Сначала задайте имя оповещения',
+  'alerts.invalidRange': 'Минимум не должен превышать максимум',
+  'alerts.browserBlocked': 'Заблокировано — разрешите уведомления для этого сайта в настройках браузера',
+
+  'feed.listening': 'Слушаем совпадения',
+  'feed.unreadCount': '{n} непрочитанных',
+  'feed.previousPrice': 'было {price}',
+  'feed.moreCount': '+{n} ещё',
+
+  'common.loading': 'Загрузка',
+  'common.error': 'Что-то пошло не так',
+  'common.retry': 'Повторить',
+  'common.save': 'Сохранить',
+  'common.cancel': 'Отмена',
+  'common.close': 'Закрыть',
+  'common.new': 'Новый',
+  'common.scanning': 'Сканируем',
+
+  'footer.disclaimer': 'Независимый инструмент мониторинга. Не аффилирован с korter.ge. Объявления © их владельцев.',
+  'footer.data': 'Данные: публичный API korter.ge',
+
+  'lang.switch': 'Язык',
+};

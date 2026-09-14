@@ -1,0 +1,202 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+ * DealRadar Georgia — "Signal Terminal" design tokens (design.md §Tokens)
+ * Single intentional dark theme. No blue / indigo / violet anywhere.
+ * ------------------------------------------------------------------------- */
+:root {
+  /* Core palette */
+  --bg: #0b0e0c; /* deep green-black */
+  --surface: #121613;
+  --raised: #171d18;
+  --border: #232a25; /* hairline */
+  --border-strong: #303a31;
+  --text: #e9eeea;
+  --muted: #97a29b;
+  --faint: #616c64;
+  --signal: #34d399; /* emerald — live dots, good scores, primary CTA */
+  --signal-dim: rgba(52, 211, 153, 0.12);
+  --drop: #fbbf24; /* amber — price drops, alerts */
+  --drop-dim: rgba(251, 191, 36, 0.12);
+  --danger: #f87171;
+  --danger-dim: rgba(248, 113, 113, 0.12);
+  --scrollbar-thumb: #2e372f;
+
+  /* shadcn semantic tokens mapped onto the terminal palette */
+  --radius: 0.625rem;
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--raised);
+  --popover-foreground: var(--text);
+  --primary: var(--signal);
+  --primary-foreground: #0b0e0c; /* black text on signal CTA */
+  --secondary: var(--raised);
+  --secondary-foreground: var(--text);
+  --muted-foreground: var(--muted);
+  --accent: #1c231e; /* hover tint */
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --input: var(--border);
+  --ring: var(--signal);
+  --chart-1: var(--signal);
+  --chart-2: var(--drop);
+  --chart-3: var(--danger);
+  --chart-4: var(--muted);
+  --chart-5: var(--border-strong);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--signal);
+  --sidebar-primary-foreground: #0b0e0c;
+  --sidebar-accent: var(--raised);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--signal);
+}
+
+@theme inline {
+  /* DealRadar token → utility classes (bg-bg, text-muted, border-border, …) */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-signal: var(--signal);
+  --color-signal-dim: var(--signal-dim);
+  --color-drop: var(--drop);
+  --color-drop-dim: var(--drop-dim);
+  --color-danger: var(--danger);
+  --color-danger-dim: var(--danger-dim);
+
+  /* shadcn semantic colors */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Motion tokens (design.md) */
+  --animate-pulse-dot: pulse-dot 2.2s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.8s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg font-sans text-text antialiased;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* Terminal scrollbar: thin, transparent track, #2E372F rounded thumb */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-strong);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Selection: signal-dim */
+  ::selection {
+    background: var(--signal-dim);
+    color: var(--text);
+  }
+}
+
+@layer components {
+  /* MICRO-LABELS: 11px Geist Mono UPPERCASE tracking .1em — the design texture */
+  .micro {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* DATA numerals: tabular figures so prices/scores never jitter */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
