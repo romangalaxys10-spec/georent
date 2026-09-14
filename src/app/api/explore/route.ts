@@ -1,58 +1,79 @@
 /**
- * /api/explore — live korter.ge listing search with deal scores.
+ * /api/explore — LIVE multi-source listing search: korter.ge + ss.ge +
+ * myhome.ge in one fan-out (Promise.allSettled), merged, cross-source
+ * deduped, deal-scored and sorted.
  *
- * GET query params:
- *   cityId (int, default 1), districts (csv of ids), rooms (csv of ints),
- *   minPrice/maxPrice/minArea/maxArea (numbers), sort
- *   (update_time_desc|price_asc|price_desc|price_sqm_asc, default
- *   update_time_desc), offset (default 0), limit (default 20, max 40).
+ * Every request hits the source network (that is the contract — the data you
+ * see is what the sites serve right now), with a 15s micro-cache keyed by the
+ * full filter set (bypass with fresh=1) to keep multi-client bursts honest
+ * but cheap.
  *
- * Pipeline: params → SearchFilters → adapter.fetchCards → score.computeDealScores.
- * Successful responses are memoized in-memory for 30s (max 50 entries, oldest
- * evicted) keyed by a canonical param string.
- * Upstream failure → 502 {error:'upstream', message}.
+ * GET params:
+ *   cityId (1=Tbilisi, 2=Batumi), districts (csv of korter district ids),
+ *   rooms (csv), minPrice/maxPrice (USD), minArea/maxArea (m²),
+ *   keyword, bedrooms (csv), minFloor/maxFloor, minPpsm/maxPpsm (USD/m²),
+ *   newBuilding=1, hasBalcony=1,
+ *   sources (csv: korter|ss|myhome, default all),
+ *   sort (update_time_desc|price_asc|price_desc|price_sqm_asc),
+ *   offset, limit (1..40), fresh=1
+ *
+ * Response: { listings, sources: ProviderRunStatus[], total, fetchedAt,
+ *             cached, offset, limit }
+ * The 502-upstream path only fires when EVERY source fails.
  */
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { fetchCards } from '@/lib/korter/adapter'
-import { computeDealScores, type DealScored } from '@/lib/korter/score'
-import type { CardFetchResult, KorterSort, SearchFilters } from '@/lib/korter/types'
 
-const CACHE_TTL_MS = 30_000
-const CACHE_MAX_ENTRIES = 50
+import { fetchDistricts } from '@/lib/korter/adapter'
+import {
+  searchAllProviders,
+  type ProviderName,
+  type UnifiedFilters,
+  type UnifiedListing,
+  type UnifiedSearchResult,
+} from '@/lib/providers/index'
 
-const SORT_VALUES = [
-  'update_time_desc',
-  'price_asc',
-  'price_desc',
-  'price_sqm_asc',
-] as const
+const CACHE_TTL_MS = 15_000
+const CACHE_MAX_ENTRIES = 40
+const TNET_PAGE_SIZE = 24
+const MAX_FETCH_PAGES = 3
+
+const SORT_VALUES = ['update_time_desc', 'price_asc', 'price_desc', 'price_sqm_asc'] as const
 
 const exploreQuerySchema = z.object({
-  cityId: z.number().int().positive().default(1),
+  cityId: z.number().int().positive().max(50).default(1),
   districtIds: z.array(z.number().int()).optional(),
   roomCounts: z.array(z.number().int()).optional(),
+  bedrooms: z.array(z.number().int()).optional(),
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
   minArea: z.number().optional(),
   maxArea: z.number().optional(),
+  minFloor: z.number().int().optional(),
+  maxFloor: z.number().int().optional(),
+  minPpsm: z.number().optional(),
+  maxPpsm: z.number().optional(),
+  keyword: z.string().trim().max(60).optional(),
+  newBuilding: z.boolean().optional(),
+  hasBalcony: z.boolean().optional(),
+  sources: z.array(z.enum(['korter', 'ss', 'myhome'])).optional(),
   sort: z.enum(SORT_VALUES).default('update_time_desc'),
   offset: z.number().int().min(0).default(0),
   limit: z.number().int().min(1).max(40).default(20),
+  fresh: z.boolean().default(false),
 })
 
 type ExploreQuery = z.infer<typeof exploreQuerySchema>
-type ScoredResult = { listings: DealScored[]; source: CardFetchResult['source'] }
-type CacheEntry = { value: ScoredResult; expiresAt: number }
 
-/** Cache singleton persisted across dev-server HMR reloads. */
+/** Cache holds the FULL merged+sorted batch per filter combo (no offset/limit). */
+type CacheEntry = { value: UnifiedSearchResult; expiresAt: number }
+
 function cache(): Map<string, CacheEntry> {
-  const g = globalThis as unknown as { __exploreCache?: Map<string, CacheEntry> }
-  if (!g.__exploreCache) g.__exploreCache = new Map()
-  return g.__exploreCache
+  const g = globalThis as unknown as { __exploreV2Cache?: Map<string, CacheEntry> }
+  if (!g.__exploreV2Cache) g.__exploreV2Cache = new Map()
+  return g.__exploreV2Cache
 }
 
-/** Raw query param → number, or NaN when absent-but-malformed. '' counts as absent. */
 function numberParam(sp: URLSearchParams, key: string): number | undefined {
   const raw = sp.get(key)
   if (raw === null || raw.trim() === '') return undefined
@@ -60,7 +81,6 @@ function numberParam(sp: URLSearchParams, key: string): number | undefined {
   return Number.isFinite(n) ? n : Number.NaN
 }
 
-/** Raw csv param → int array; undefined when absent/empty; NaN entries stay for zod to reject. */
 function csvIntsParam(sp: URLSearchParams, key: string): number[] | undefined {
   const raw = sp.get(key)
   if (raw === null || raw.trim() === '') return undefined
@@ -79,68 +99,133 @@ function canonicalKey(q: ExploreQuery): string {
     cityId: q.cityId,
     districts: [...(q.districtIds ?? [])].sort((a, b) => a - b),
     rooms: [...(q.roomCounts ?? [])].sort((a, b) => a - b),
+    bedrooms: [...(q.bedrooms ?? [])].sort((a, b) => a - b),
     minPrice: q.minPrice,
     maxPrice: q.maxPrice,
     minArea: q.minArea,
     maxArea: q.maxArea,
+    minFloor: q.minFloor,
+    maxFloor: q.maxFloor,
+    minPpsm: q.minPpsm,
+    maxPpsm: q.maxPpsm,
+    keyword: q.keyword,
+    newBuilding: q.newBuilding,
+    hasBalcony: q.hasBalcony,
+    sources: [...(q.sources ?? [])].sort(),
     sort: q.sort,
-    offset: q.offset,
-    limit: q.limit,
   })
 }
 
-function toSearchFilters(q: ExploreQuery): SearchFilters {
-  const filters: SearchFilters = {
-    cityId: q.cityId,
-    sort: q.sort as KorterSort,
-    offset: q.offset,
-    limit: q.limit,
+function sortListings(listings: UnifiedListing[], sort: ExploreQuery['sort']): UnifiedListing[] {
+  const out = [...listings]
+  switch (sort) {
+    case 'price_asc':
+      out.sort((a, b) => (a.priceUsd || Infinity) - (b.priceUsd || Infinity))
+      break
+    case 'price_desc':
+      out.sort((a, b) => b.priceUsd - a.priceUsd)
+      break
+    case 'price_sqm_asc':
+      out.sort((a, b) => (a.ppsmUsd > 0 ? a.ppsmUsd : Infinity) - (b.ppsmUsd > 0 ? b.ppsmUsd : Infinity))
+      break
+    case 'update_time_desc':
+      out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      break
   }
-  if (q.districtIds && q.districtIds.length > 0) filters.districtIds = q.districtIds
-  if (q.roomCounts && q.roomCounts.length > 0) filters.roomCounts = q.roomCounts
-  if (q.minPrice !== undefined) filters.minPrice = q.minPrice
-  if (q.maxPrice !== undefined) filters.maxPrice = q.maxPrice
-  if (q.minArea !== undefined) filters.minArea = q.minArea
-  if (q.maxArea !== undefined) filters.maxArea = q.maxArea
-  return filters
+  return out
+}
+
+/** Pages needed per source so that [offset, offset+limit) is fully covered. */
+function pagesFor(offset: number, limit: number): number {
+  return Math.min(MAX_FETCH_PAGES, Math.max(1, Math.ceil((offset + limit) / TNET_PAGE_SIZE)))
 }
 
 export async function GET(request: Request) {
   try {
     const sp = new URL(request.url).searchParams
     const parsed = exploreQuerySchema.safeParse({
-      cityId: numberParam(sp, 'cityId'),
+      cityId: numberParam(sp, 'cityId') ?? 1,
       districtIds: csvIntsParam(sp, 'districts'),
       roomCounts: csvIntsParam(sp, 'rooms'),
+      bedrooms: csvIntsParam(sp, 'bedrooms'),
       minPrice: numberParam(sp, 'minPrice'),
       maxPrice: numberParam(sp, 'maxPrice'),
       minArea: numberParam(sp, 'minArea'),
       maxArea: numberParam(sp, 'maxArea'),
+      minFloor: numberParam(sp, 'minFloor'),
+      maxFloor: numberParam(sp, 'maxFloor'),
+      minPpsm: numberParam(sp, 'minPpsm'),
+      maxPpsm: numberParam(sp, 'maxPpsm'),
+      keyword: sp.get('keyword') ?? undefined,
+      newBuilding: sp.get('newBuilding') === '1' ? true : undefined,
+      hasBalcony: sp.get('hasBalcony') === '1' ? true : undefined,
+      sources: sp.get('sources')
+        ? sp
+            .get('sources')!
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s): s is ProviderName => s === 'korter' || s === 'ss' || s === 'myhome')
+        : undefined,
       sort: sp.get('sort') ?? undefined,
-      offset: numberParam(sp, 'offset'),
-      limit: numberParam(sp, 'limit'),
+      offset: numberParam(sp, 'offset') ?? 0,
+      limit: numberParam(sp, 'limit') ?? 20,
+      fresh: sp.get('fresh') === '1',
     })
     if (!parsed.success) {
-      const msg = parsed.error.issues
-        .map((i) => `${i.path.join('.')}: ${i.message}`)
-        .join('; ')
+      const msg = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')
       return NextResponse.json({ error: `invalid query params: ${msg}` }, { status: 400 })
     }
-    const query = parsed.data
-    const key = canonicalKey(query)
+    const q = parsed.data
 
+    // Resolve korter district ids → names so tnet sources can post-filter.
+    let districtNames: string[] | undefined
+    if (q.districtIds && q.districtIds.length > 0) {
+      try {
+        const districts = await fetchDistricts(q.cityId)
+        const byId = new Map(districts.map((d) => [d.id, d.name]))
+        districtNames = q.districtIds
+          .map((id) => byId.get(id))
+          .filter((n): n is string => typeof n === 'string')
+      } catch {
+        districtNames = undefined
+      }
+    }
+
+    const key = canonicalKey(q)
     const now = Date.now()
     const hit = cache().get(key)
-    let result: ScoredResult
-    if (hit && hit.expiresAt > now) {
+    let result: UnifiedSearchResult
+    if (hit && hit.expiresAt > now && !q.fresh) {
       result = hit.value
-      // Refresh recency so the Map evicts the true oldest entry first.
       cache().delete(key)
-      cache().set(key, hit)
+      cache().set(key, hit) // refresh recency
     } else {
       if (hit) cache().delete(key)
-      const fetched = await fetchCards(toSearchFilters(query))
-      result = { listings: computeDealScores(fetched.listings), source: fetched.source }
+      const filters: UnifiedFilters = {
+        cityId: q.cityId,
+        districtIds: q.districtIds,
+        districtNames,
+        roomCounts: q.roomCounts,
+        bedrooms: q.bedrooms,
+        minPrice: q.minPrice,
+        maxPrice: q.maxPrice,
+        minArea: q.minArea,
+        maxArea: q.maxArea,
+        minFloor: q.minFloor,
+        maxFloor: q.maxFloor,
+        minPpsm: q.minPpsm,
+        maxPpsm: q.maxPpsm,
+        keyword: q.keyword || undefined,
+        newBuilding: q.newBuilding,
+        hasBalcony: q.hasBalcony,
+        page: 1,
+        perPage: q.limit,
+      }
+      result = await searchAllProviders(filters, {
+        providers: q.sources,
+        maxPages: pagesFor(q.offset, q.limit),
+      })
+      result.listings = sortListings(result.listings, q.sort)
       const store = cache()
       while (store.size >= CACHE_MAX_ENTRIES) {
         const oldest = store.keys().next().value
@@ -150,11 +235,15 @@ export async function GET(request: Request) {
       store.set(key, { value: result, expiresAt: Date.now() + CACHE_TTL_MS })
     }
 
+    const page = result.listings.slice(q.offset, q.offset + q.limit)
     return NextResponse.json({
-      listings: result.listings,
-      source: result.source,
-      offset: query.offset,
-      limit: query.limit,
+      listings: page,
+      sources: result.statuses,
+      total: result.listings.length,
+      fetchedAt: result.fetchedAt,
+      cached: !q.fresh && hit !== undefined,
+      offset: q.offset,
+      limit: q.limit,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

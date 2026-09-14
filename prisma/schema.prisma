@@ -95,3 +95,29 @@ model DistrictStat {
 
   @@unique([cityId, districtId])
 }
+
+// Price-tracking snapshot for non-korter sources (ss.ge / myhome.ge),
+// keyed "provider:remoteId". Written on every offer-page live sync so
+// min-price and drop counts persist across views.
+model RemoteListing {
+  id           String   @id // "ss:25954411" | "myhome:26042136"
+  provider     String // "ss" | "myhome"
+  remoteId     String
+  title        String
+  priceUsd     Float
+  lastPriceUsd Float
+  minPriceUsd  Float
+  priceDrops   Int      @default(0)
+  area         Float
+  roomCount    Int
+  ppsmUsd      Float
+  districtName String?
+  cityName     String?
+  sourceUrl    String
+  image        String?
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  raw          String
+
+  @@index([provider, lastSeenAt])
+}

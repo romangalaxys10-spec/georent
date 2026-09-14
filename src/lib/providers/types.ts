@@ -117,6 +117,8 @@ export type UnifiedDetail = {
 /** Filters shared by every provider search (USD prices, m² areas). */
 export type UnifiedFilters = {
   cityId: number
+  /** Korter district geo ids (korter live filter). */
+  districtIds?: number[]
   districtNames?: string[]
   roomCounts?: number[]
   minPrice?: number
@@ -126,4 +128,18 @@ export type UnifiedFilters = {
   /** 1-based page for pagination-aware providers. */
   page: number
   perPage: number
+  /** Free-text keyword — live param on tnet sources, ignored by korter. */
+  keyword?: string
+  /** Bedroom counts — post-filtered (available on tnet cards). */
+  bedrooms?: number[]
+  /** Floor range — post-filtered on card floor fields. */
+  minFloor?: number
+  maxFloor?: number
+  /** USD/m² range — post-filtered everywhere (scoring currency). */
+  minPpsm?: number
+  maxPpsm?: number
+  /** Developer/new-building toggle — live param on tnet. */
+  newBuilding?: boolean
+  /** Balcony toggle — live param on tnet. */
+  hasBalcony?: boolean
 }
