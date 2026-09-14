@@ -229,11 +229,13 @@ export function ExploreView({
 
   return (
     <section className="flex flex-col gap-4" aria-busy={loading}>
-      {/* Toolbar: view toggle + live status + sort */}
+      {/* Toolbar: view toggle + live status + sort.
+          Mobile: toggle+sort share row 1, the live strip takes row 2.
+          lg: original single row — toggle · status · sort. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* List/Map segmented toggle */}
         <div
-          className="flex h-9 items-center rounded-md border border-border bg-raised p-0.5"
+          className="order-1 flex h-9 items-center rounded-md border border-border bg-raised p-0.5"
           role="tablist"
           aria-label={t('sources.viewToggle')}
         >
@@ -259,8 +261,31 @@ export function ExploreView({
           ))}
         </div>
 
+        <Select
+          value={value.sort}
+          onValueChange={(v) => onChange({ ...value, sort: v as SortValue })}
+        >
+          <SelectTrigger
+            aria-label={t('filters.sort')}
+            className="order-2 h-9 w-[150px] rounded-md border-border bg-raised font-mono text-[12px] uppercase tracking-[0.06em] text-muted focus-visible:ring-ring/50 sm:w-[170px] lg:order-3 lg:w-[190px]"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="border-border">
+            {SORT_ITEMS.map((item) => (
+              <SelectItem
+                key={item.value}
+                value={item.value}
+                className="font-mono text-[12px] uppercase tracking-[0.06em]"
+              >
+                {t(item.key)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         {/* Live search status */}
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-2">
+        <div className="order-3 flex min-w-0 w-full items-center justify-center gap-2 lg:order-2 lg:w-auto lg:flex-1 lg:px-2">
           <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
             <span aria-hidden className="size-[6px] animate-pulse-dot rounded-full bg-signal" />
             {t('sources.live')}
@@ -290,29 +315,6 @@ export function ExploreView({
             </span>
           ) : null}
         </div>
-
-        <Select
-          value={value.sort}
-          onValueChange={(v) => onChange({ ...value, sort: v as SortValue })}
-        >
-          <SelectTrigger
-            aria-label={t('filters.sort')}
-            className="h-9 w-[190px] rounded-md border-border bg-raised font-mono text-[12px] uppercase tracking-[0.06em] text-muted focus-visible:ring-ring/50"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="border-border">
-            {SORT_ITEMS.map((item) => (
-              <SelectItem
-                key={item.value}
-                value={item.value}
-                className="font-mono text-[12px] uppercase tracking-[0.06em]"
-              >
-                {t(item.key)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Stale-refresh progress bar (keeps layout animation intact) */}

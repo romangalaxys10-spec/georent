@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "@/lib/i18n";
@@ -28,6 +28,12 @@ export const metadata: Metadata = {
     "korter.ge",
     "price drops",
   ],
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0B0E0C",
 };
 
 export default function RootLayout({

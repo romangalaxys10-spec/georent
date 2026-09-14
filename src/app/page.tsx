@@ -57,7 +57,7 @@ export default function Home() {
         <SheetTrigger asChild>
           <button
             type="button"
-            className="fixed bottom-5 end-5 z-40 flex h-11 items-center gap-2 rounded-full bg-signal px-4 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[#0B0E0C] shadow-lg shadow-black/40 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 lg:hidden"
+            className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] end-5 z-40 flex h-11 items-center gap-2 rounded-full bg-signal px-4 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[#0B0E0C] shadow-lg shadow-black/40 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 lg:hidden"
           >
             <SlidersHorizontal className="size-4" aria-hidden />
             {t('filters.title')}
@@ -65,7 +65,7 @@ export default function Home() {
         </SheetTrigger>
         <SheetContent
           side="bottom"
-          className="max-h-[88vh] gap-0 overflow-y-auto rounded-t-2xl border-border bg-bg px-5 pb-8 pt-4 sm:max-w-none"
+          className="max-h-[88vh] gap-0 overflow-y-auto rounded-t-2xl border-border bg-bg px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 sm:max-w-none"
         >
           <SheetTitle className="sr-only">{t('filters.title')}</SheetTitle>
           <div className="flex flex-col gap-4">

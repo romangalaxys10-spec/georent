@@ -147,12 +147,39 @@
 
   html {
     color-scheme: dark;
+    /* Mobile safety net: intrinsic-width media (source photos) must never
+       blow the layout out horizontally — clip instead of scroll-bleed. */
+    overflow-x: clip;
   }
 
   body {
     @apply bg-bg font-sans text-text antialiased;
     font-size: 14px;
     line-height: 1.55;
+    overflow-x: clip;
+    /* Kill the grey iOS/Android flash on taps; components own their states. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS Safari auto-zooms any focused input smaller than 16px — keep form
+     fields at 16px on phones (13px mono is preserved from sm up). */
+  @media (max-width: 639px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Comfortable tap targets on touch screens */
+  @media (pointer: coarse) {
+    button,
+    a,
+    input,
+    select,
+    [role='button'] {
+      touch-action: manipulation;
+    }
   }
 
   /* Terminal scrollbar: thin, transparent track, #2E372F rounded thumb */

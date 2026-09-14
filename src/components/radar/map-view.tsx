@@ -139,21 +139,21 @@ export function MapView({ items }: { items: ScoredListing[] }) {
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-border bg-surface">
-      <div ref={containerRef} className="h-[560px] w-full" role="application" aria-label={t('sources.viewMap')} />
+      <div ref={containerRef} className="h-[440px] w-full sm:h-[560px]" role="application" aria-label={t('sources.viewMap')} />
       {/* Legend */}
-      <div className="pointer-events-none absolute bottom-3 start-3 z-[500] flex flex-col gap-1 rounded-lg border border-border bg-[#0B0E0C]/85 px-3 py-2 backdrop-blur-sm">
+      <div className="pointer-events-none absolute bottom-3 start-3 z-[500] flex max-w-[calc(100%-3.5rem)] flex-col gap-1 rounded-lg border border-border bg-[#0B0E0C]/85 px-3 py-2 backdrop-blur-sm">
         <span className="micro text-faint">{t('map.legend')}</span>
-        <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted">
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono text-[10px] text-muted">
           <span aria-hidden className="size-[7px] rounded-full" style={{ background: '#3DD68C' }} />
           {t('listing.scoreExcellent')}
-          <span aria-hidden className="ms-2 size-[7px] rounded-full" style={{ background: '#E8A03C' }} />
+          <span aria-hidden className="ms-1.5 size-[7px] rounded-full sm:ms-2" style={{ background: '#E8A03C' }} />
           {t('listing.scoreGood')}
-          <span aria-hidden className="ms-2 size-[7px] rounded-full" style={{ background: '#5B6470' }} />
+          <span aria-hidden className="ms-1.5 size-[7px] rounded-full sm:ms-2" style={{ background: '#5B6470' }} />
           {t('listing.scorePricey')}
         </span>
       </div>
-      {/* Count badge */}
-      <div className="pointer-events-none absolute end-3 top-3 z-[500] rounded-md border border-border bg-[#0B0E0C]/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted tnum backdrop-blur-sm">
+      {/* Count badge — top offset clears Leaflet's zoom stack (physical top-left) */}
+      <div className="pointer-events-none absolute end-3 top-[70px] z-[500] max-w-[calc(100%-7rem)] truncate rounded-md border border-border bg-[#0B0E0C]/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted tnum backdrop-blur-sm sm:top-3 sm:end-[4.25rem]">
         {geolocated} / {items.length} {t('map.pins')}
       </div>
       {!ready ? (

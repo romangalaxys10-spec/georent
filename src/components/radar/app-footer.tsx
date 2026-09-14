@@ -26,7 +26,8 @@ export function AppFooter() {
 
   return (
     <footer className="mt-auto border-t border-border">
-      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-2.5 px-5 py-6 lg:px-8">
+      {/* pb clears the mobile filters FAB so it never covers this text */}
+      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-2.5 px-5 pb-24 pt-6 lg:px-8 lg:pb-6">
         {/* Sources status row — real last-known run status per source */}
         {statuses.length > 0 ? (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 font-mono text-[11px] tracking-[0.06em]">

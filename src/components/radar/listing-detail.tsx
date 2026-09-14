@@ -70,7 +70,7 @@ function sanitizeDescription(html: string): string {
 
 /** 12-month market ppsm sparkline (inline SVG, no deps). */
 function Sparkline({ data, current }: { data: { date: string; avgPpsmUsd: number }[]; current: number }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   if (data.length < 2) return null;
   const W = 560;
   const H = 120;
@@ -102,9 +102,9 @@ function Sparkline({ data, current }: { data: { date: string; avgPpsmUsd: number
           />
         ) : null}
       </svg>
-      <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-faint tnum">
+      <div dir="ltr" className="mt-1 flex items-center justify-between font-mono text-[10px] text-faint tnum">
         <span>
-          {t('detail.marketAvg')}: {formatPrice(Math.round(avg), 'en')}/m²
+          {t('detail.marketAvg')}: {formatPrice(Math.round(avg), locale)}/m²
         </span>
         <span>
           {data[0].date} → {data[data.length - 1].date}
@@ -141,6 +141,8 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
   const [, tick] = useState(0);
 
   const syncRef = useRef<() => void>(() => {});
+  const syncedAtRef = useRef<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
   const photoCount = data?.photos.length ?? 0;
 
   const load = useCallback(
@@ -161,7 +163,9 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
         const payload = json as DetailPayload;
         if ('error' in payload) throw new Error(String(payload.error));
         setData(payload);
-        setSyncedAt(Date.now());
+        const now = Date.now();
+        setSyncedAt(now);
+        syncedAtRef.current = now;
         setPhotoIdx((i) => (payload.photos.length > 0 ? Math.min(i, payload.photos.length - 1) : 0));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
@@ -182,7 +186,8 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
       if (document.visibilityState === 'visible') syncRef.current();
     }, SYNC_INTERVAL_MS);
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && syncedAt && Date.now() - syncedAt > SYNC_INTERVAL_MS) {
+      const at = syncedAtRef.current;
+      if (document.visibilityState === 'visible' && at && Date.now() - at > SYNC_INTERVAL_MS) {
         syncRef.current();
       }
     };
@@ -230,6 +235,19 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
     }
   }, []);
 
+  // Gallery touch swipe (mobile): horizontal fling advances the photo.
+  const onGalleryTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onGalleryTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartX.current;
+    touchStartX.current = null;
+    if (start === null || photoCount < 2) return;
+    const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+    if (Math.abs(dx) < 40) return;
+    setPhotoIdx((i) => (dx < 0 ? (i + 1) % photoCount : (i - 1 + photoCount) % photoCount));
+  };
+
   // --- States ---
   if (notFound) {
     return (
@@ -250,17 +268,17 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
 
   if (loading && !data) {
     return (
-      <div className="mx-auto w-full max-w-[1100px] px-5 py-8">
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-          <div className="flex flex-col gap-3">
+      <div className="mx-auto w-full max-w-[1100px] px-4 py-8 sm:px-5 lg:px-8">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-3">
             <div className="aspect-[4/3] w-full animate-pulse rounded-xl bg-raised" />
             <div className="flex gap-2">
               {Array.from({ length: 5 }, (_, i) => (
-                <span key={i} className="h-16 w-24 animate-pulse rounded-lg bg-raised" />
+                <span key={i} className="h-16 w-24 shrink-0 animate-pulse rounded-lg bg-raised" />
               ))}
             </div>
           </div>
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             <span className="h-8 w-1/2 animate-pulse rounded bg-raised" />
             <span className="h-4 w-1/3 animate-pulse rounded bg-raised" />
             <span className="h-32 w-full animate-pulse rounded-xl bg-raised" />
@@ -336,27 +354,29 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
   ].filter((p) => p.value);
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] px-5 py-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1100px] px-4 pb-32 pt-5 sm:px-5 lg:px-8 lg:pb-8">
       {/* Top bar: back + live sync status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           href="/"
-          className="flex h-9 items-center gap-2 rounded-md border border-border bg-surface px-3 text-[13px] text-muted transition-colors hover:border-border-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-surface px-3 text-[13px] text-muted transition-colors hover:border-border-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t('detail.backToFeed')}
         </Link>
-        <div className="flex items-center gap-2.5">
-          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
-            <span aria-hidden className="size-[6px] animate-pulse-dot rounded-full bg-signal" />
-            {t('detail.liveSync')}
-            {syncedAgo ? <span className="text-faint normal-case tracking-normal">· {syncedAgo}</span> : null}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
+            <span aria-hidden className="size-[6px] shrink-0 animate-pulse-dot rounded-full bg-signal" />
+            <span className="truncate">
+              {t('detail.liveSync')}
+              {syncedAgo ? <span className="text-faint normal-case tracking-normal">· {syncedAgo}</span> : null}
+            </span>
           </span>
           <button
             type="button"
             onClick={() => syncRef.current()}
             disabled={syncing}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted transition-colors hover:border-signal/50 hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted transition-colors hover:border-signal/50 hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
           >
             <RefreshCw className={`size-3 ${syncing ? 'animate-spin' : ''}`} aria-hidden />
             {syncing ? t('detail.syncing') : t('detail.syncNow')}
@@ -365,19 +385,30 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
       </div>
       <p className="micro mt-2 text-faint">{t('detail.autoSync')}</p>
 
-      <div className="mt-4 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        {/* Gallery */}
-        <section aria-label={t('detail.offer')}>
-          <div className="relative overflow-hidden rounded-xl border border-border bg-raised">
+      {/*
+        Grid: mobile = one minmax(0,1fr) column in DOM order (gallery →
+        price/params/seller → description); lg = 2 columns with the right
+        column spanning both rows. minmax(0,…) + min-w-0 are CRITICAL — bare
+        tracks size to the photo's intrinsic width and blow the viewport out
+        horizontally on phones (the original mobile-hostility bug).
+      */}
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-6">
+        {/* Gallery — col 1 / row 1 */}
+        <section aria-label={t('detail.offer')} className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <div
+            className="relative overflow-hidden rounded-xl border border-border bg-raised"
+            onTouchStart={onGalleryTouchStart}
+            onTouchEnd={onGalleryTouchEnd}
+          >
             {data.photos[photoIdx] ? (
               <img
                 src={data.photos[photoIdx].large}
                 alt={`${l.title} — ${photoIdx + 1}/${photoCount}`}
-                className="aspect-[4/3] w-full object-cover"
+                className="aspect-[4/3] w-full max-w-full object-cover"
                 decoding="async"
               />
             ) : l.image ? (
-              <img src={l.image} alt={l.title} className="aspect-[4/3] w-full object-cover" />
+              <img src={l.image} alt={l.title} className="aspect-[4/3] w-full max-w-full object-cover" />
             ) : (
               <div className="flex aspect-[4/3] w-full items-center justify-center text-faint">—</div>
             )}
@@ -399,7 +430,7 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
                 >
                   <ChevronRight className="size-4 rtl:rotate-180" aria-hidden />
                 </button>
-                <span className="absolute bottom-2 end-2 rounded-md bg-[#0B0E0C]/70 px-2 py-0.5 font-mono text-[10px] text-text tnum backdrop-blur-sm">
+                <span dir="ltr" className="absolute bottom-2 end-2 rounded-md bg-[#0B0E0C]/70 px-2 py-0.5 font-mono text-[10px] text-text tnum backdrop-blur-sm">
                   {photoIdx + 1} / {photoCount}
                 </span>
               </>
@@ -424,25 +455,20 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
                     i === photoIdx ? 'border-signal' : 'border-border opacity-70 hover:opacity-100'
                   }`}
                 >
-                  <img src={p.thumb ?? p.large} alt="" className="size-full object-cover" loading="lazy" />
+                  <img src={p.thumb ?? p.large} alt="" className="size-full max-w-full object-cover" loading="lazy" />
                 </button>
               ))}
             </div>
           ) : null}
-
-          {/* Description */}
-          {description ? (
-            <section className="mt-5 rounded-xl border border-border bg-surface p-5">
-              <h2 className="micro text-muted">{t('detail.description')}</h2>
-              <div className="mt-3 whitespace-pre-line text-[14px] leading-relaxed text-text">
-                {description}
-              </div>
-            </section>
-          ) : null}
         </section>
 
-        {/* Right column */}
-        <section className="flex flex-col gap-4">
+        {/* Price · title · parameters · seller · actions — col 2, spans both rows on lg.
+            On mobile it lands directly under the gallery (price first, description last). */}
+        <section
+          className={`flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1 ${
+            description ? 'lg:row-span-2' : ''
+          }`}
+        >
           {/* Price panel */}
           <div className="rounded-xl border border-border bg-surface p-5">
             <div className="flex items-start justify-between gap-3">
@@ -581,6 +607,39 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
             </button>
           </div>
         </section>
+
+        {/* Description — its own grid item: last on mobile, under the gallery on lg */}
+        {description ? (
+          <section className="min-w-0 rounded-xl border border-border bg-surface p-4 sm:p-5 lg:col-start-1 lg:row-start-2">
+            <h2 className="micro text-muted">{t('detail.description')}</h2>
+            <div className="mt-3 whitespace-pre-line text-[14px] leading-relaxed text-text">
+              {description}
+            </div>
+          </section>
+        ) : null}
+      </div>
+
+      {/* Sticky mobile action bar — price + source CTA stay reachable while scrolling */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-[#0B0E0C]/95 backdrop-blur-md lg:hidden">
+        <div className="mx-auto flex w-full max-w-[1100px] items-center gap-3 px-4 pb-[max(env(safe-area-inset-bottom),0.625rem)] pt-2.5">
+          <div className="min-w-0">
+            <div className="truncate font-mono text-[17px] font-semibold leading-none text-text tnum">
+              {formatPrice(l.priceUsd, locale)}
+            </div>
+            <div className="micro mt-1 truncate text-faint">
+              {site}
+              {l.ppsmUsd > 0 ? ` · ${formatPrice(Math.round(l.ppsmUsd), locale)}/m²` : ''}
+            </div>
+          </div>
+          <a
+            href={l.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ms-auto flex h-10 shrink-0 items-center rounded-md bg-signal px-4 text-[13px] font-medium text-[#0B0E0C] transition-[filter] active:brightness-110"
+          >
+            <span className="truncate">{t('detail.viewOnSource', { site })}</span>
+          </a>
+        </div>
       </div>
     </div>
   );

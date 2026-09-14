@@ -117,7 +117,8 @@ function AlertRow({
         </span>
       </div>
 
-      <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.06em] leading-relaxed text-faint tnum">
+      {/* line-clamp instead of truncate: the full terms stay visible on narrow phones */}
+      <p className="mt-1 line-clamp-2 font-mono text-[10px] uppercase tracking-[0.06em] leading-relaxed text-faint tnum">
         {parts.join(' · ')}
       </p>
 

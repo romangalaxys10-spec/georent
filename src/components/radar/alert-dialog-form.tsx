@@ -387,7 +387,7 @@ export function AlertDialogForm() {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : closeAlertDialog())}>
       <DialogContent className="max-w-[460px] gap-0 border-border bg-surface p-0">
-        <span className="sr-only">{t('alerts.create')}</span>
+        <DialogDescription className="sr-only">{t('alerts.create')}</DialogDescription>
         {ready ? (
           <AlertFormInner key={editingAlertId ?? 'create'} alert={editing} onClose={closeAlertDialog} />
         ) : (
