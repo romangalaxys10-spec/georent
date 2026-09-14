@@ -14,7 +14,8 @@
  *
  * fetchUnifiedDetail dispatches the dedicated offer-page fetch per provider.
  */
-import { fetchCards, type SearchFilters as KorterFilters } from '@/lib/korter/adapter'
+import { fetchCards } from '@/lib/korter/adapter'
+import type { SearchFilters as KorterFilters } from '@/lib/korter/types'
 import { computeDealScores } from '@/lib/korter/score'
 import type { KorterListing } from '@/lib/korter/types'
 

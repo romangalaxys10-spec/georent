@@ -200,3 +200,115 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* ================= MapView (Leaflet) — Signal Terminal skin ================= */
+
+/* Dark-tinted raster tiles */
+.dr-map-tiles {
+  filter: grayscale(0.35) invert(0.92) hue-rotate(185deg) brightness(0.86) contrast(0.92);
+}
+
+/* Price-pill pins */
+.dr-price-pin {
+  background: transparent;
+  border: 0;
+}
+.dr-price-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  background: rgba(11, 14, 12, 0.92);
+  border: 1px solid color-mix(in srgb, var(--pill, #5b6470) 65%, transparent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  color: #e7ece9;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.dr-price-pin:hover .dr-price-pill {
+  transform: translate(-50%, -100%) scale(1.06);
+  border-color: var(--pill, #5b6470);
+}
+.dr-price-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pill, #5b6470);
+}
+
+/* Mini-card popup */
+.dr-popup {
+  width: 220px;
+  padding: 0;
+  margin: 0;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+.dr-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+}
+.dr-popup-img {
+  display: block;
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  background: #141816;
+}
+.dr-popup-body {
+  padding: 10px 12px 12px;
+}
+.dr-popup-price {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #e7ece9;
+  font-variant-numeric: tabular-nums;
+}
+.dr-popup-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #93a09a;
+}
+.dr-popup-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+.dr-popup-link:hover {
+  text-decoration: underline;
+}
+
+/* Leaflet chrome on dark */
+.leaflet-container {
+  background: #0d100e;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #141816;
+  color: #e7ece9;
+  border: 1px solid #2a302c;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-close-button {
+  color: #93a09a !important;
+}
+.leaflet-bar a {
+  background: #141816 !important;
+  color: #e7ece9 !important;
+  border-color: #2a302c !important;
+}
+.leaflet-bar a:hover {
+  background: #1d231f !important;
+}

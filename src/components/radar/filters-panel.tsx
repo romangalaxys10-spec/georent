@@ -10,9 +10,10 @@
  * mono text. Districts stream from /api/districts (refetches on city change,
  * skeleton chips while loading).
  */
-import { SlidersHorizontal } from 'lucide-react';
+import { Search, SlidersHorizontal } from 'lucide-react';
 
 import { useI18n } from '@/lib/i18n';
+import type { ProviderName } from '@/lib/providers/types';
 import {
   Select,
   SelectContent,
@@ -34,6 +35,19 @@ export type FiltersState = {
   minArea?: number;
   maxArea?: number;
   sort: SortValue;
+  /** Free-text keyword (live on ss/myhome). */
+  keyword: string;
+  /** Bedroom counts — post-filtered. */
+  bedrooms: number[];
+  minFloor?: number;
+  maxFloor?: number;
+  /** USD/m² bounds — post-filtered everywhere. */
+  minPpsm?: number;
+  maxPpsm?: number;
+  newBuilding: boolean;
+  hasBalcony: boolean;
+  /** Active source subset; empty = all three. */
+  sources: ProviderName[];
 };
 
 export const DEFAULT_FILTERS: FiltersState = {
@@ -41,9 +55,20 @@ export const DEFAULT_FILTERS: FiltersState = {
   districts: [],
   rooms: [],
   sort: 'update_time_desc',
+  keyword: '',
+  bedrooms: [],
+  newBuilding: false,
+  hasBalcony: false,
+  sources: [],
 };
 
 const ROOM_OPTIONS = [1, 2, 3, 4, 5];
+const BEDROOM_OPTIONS = [1, 2, 3, 4];
+const SOURCE_OPTIONS: { id: ProviderName; label: string }[] = [
+  { id: 'korter', label: 'Korter' },
+  { id: 'ss', label: 'SS.ge' },
+  { id: 'myhome', label: 'MyHome' },
+];
 
 const chipBase =
   'flex h-7 items-center rounded-md border px-2.5 font-mono text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50';
@@ -133,6 +158,25 @@ export function FiltersPanel({
       <div className="flex items-center gap-2">
         <SlidersHorizontal className="size-3.5 text-faint" aria-hidden />
         <span className="micro text-muted">{t('filters.title')}</span>
+      </div>
+
+      {/* Keyword */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('filters.keyword')}</SectionLabel>
+        <div className="relative mt-2">
+          <Search
+            className="pointer-events-none absolute inset-y-0 start-2.5 size-3.5 text-faint"
+            aria-hidden
+          />
+          <input
+            type="text"
+            aria-label={t('filters.keyword')}
+            placeholder={t('filters.keywordPlaceholder')}
+            value={value.keyword}
+            onChange={(e) => onChange({ ...value, keyword: e.target.value })}
+            className={`${inputBase} ps-8 pe-2.5`}
+          />
+        </div>
       </div>
 
       {/* Budget */}
@@ -230,6 +274,36 @@ export function FiltersPanel({
         ) : null}
       </div>
 
+      {/* Bedrooms */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('filters.bedrooms')}</SectionLabel>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {BEDROOM_OPTIONS.map((beds) => {
+            const active = value.bedrooms.includes(beds);
+            return (
+              <button
+                key={beds}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onChange({ ...value, bedrooms: toggle(value.bedrooms, beds) })}
+                className={`${chipBase} min-w-9 justify-center ${active ? chipOn : chipOff}`}
+              >
+                {beds === 4 ? '4+' : beds}
+              </button>
+            );
+          })}
+          {value.bedrooms.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onChange({ ...value, bedrooms: [] })}
+              className={`${chipBase} ${chipOff}`}
+            >
+              {t('filters.anyRooms')}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {/* Rooms */}
       <div className="mt-4 border-t border-border pt-4">
         <SectionLabel>{t('filters.rooms')}</SectionLabel>
@@ -276,6 +350,110 @@ export function FiltersPanel({
             value={value.maxArea}
             onChange={(n) => onChange({ ...value, maxArea: n })}
           />
+        </div>
+      </div>
+
+      {/* Floor range */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('filters.floor')}</SectionLabel>
+        <div className="mt-2 flex items-center gap-2">
+          <NumberInput
+            ariaLabel={`${t('filters.floor')} — ${t('filters.from')}`}
+            placeholder={t('filters.from')}
+            value={value.minFloor}
+            onChange={(n) =>
+              onChange({ ...value, minFloor: n === undefined ? undefined : Math.round(n) })
+            }
+          />
+          <NumberInput
+            ariaLabel={`${t('filters.floor')} — ${t('filters.to')}`}
+            placeholder={t('filters.to')}
+            value={value.maxFloor}
+            onChange={(n) =>
+              onChange({ ...value, maxFloor: n === undefined ? undefined : Math.round(n) })
+            }
+          />
+        </div>
+      </div>
+
+      {/* Price per m² */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('filters.ppsm')}</SectionLabel>
+        <div className="mt-2 flex items-center gap-2">
+          <NumberInput
+            ariaLabel={`${t('filters.ppsm')} — ${t('filters.from')}`}
+            placeholder={t('filters.from')}
+            prefix="$"
+            value={value.minPpsm}
+            onChange={(n) => onChange({ ...value, minPpsm: n })}
+          />
+          <NumberInput
+            ariaLabel={`${t('filters.ppsm')} — ${t('filters.to')}`}
+            placeholder={t('filters.to')}
+            prefix="$"
+            value={value.maxPpsm}
+            onChange={(n) => onChange({ ...value, maxPpsm: n })}
+          />
+        </div>
+      </div>
+
+      {/* Quick toggles */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('filters.features')}</SectionLabel>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            aria-pressed={value.newBuilding}
+            onClick={() => onChange({ ...value, newBuilding: !value.newBuilding })}
+            className={`${chipBase} ${value.newBuilding ? chipOn : chipOff}`}
+          >
+            {t('filters.newBuilding')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={value.hasBalcony}
+            onClick={() => onChange({ ...value, hasBalcony: !value.hasBalcony })}
+            className={`${chipBase} ${value.hasBalcony ? chipOn : chipOff}`}
+          >
+            {t('filters.hasBalcony')}
+          </button>
+        </div>
+      </div>
+
+      {/* Sources */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('filters.sources')}</SectionLabel>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {SOURCE_OPTIONS.map((s) => {
+            const active = value.sources.includes(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    sources: active
+                      ? value.sources.filter((x) => x !== s.id)
+                      : [...value.sources, s.id],
+                  })
+                }
+                className={`${chipBase} ${active ? chipOn : chipOff}`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+          {value.sources.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onChange({ ...value, sources: [] })}
+              className={`${chipBase} ${chipOff}`}
+            >
+              {t('filters.allSources')}
+            </button>
+          ) : null}
         </div>
       </div>
 

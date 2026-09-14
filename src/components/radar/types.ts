@@ -1,26 +1,29 @@
 /**
  * Shared client-side types for the radar UI.
  *
- * The explore API spreads the full KorterListing into every scored result,
- * but `DealScored` only types the scoring fields — so the UI consumes this
- * intersection, with `actualizeTime` narrowed to the ISO string it actually
- * is once serialized over JSON.
+ * The explore API now fans out to ALL sources (korter + ss.ge + myhome.ge),
+ * so every result is a `UnifiedListing` — normalized across providers — plus
+ * the deal-score fields computed over the merged batch.
  */
-import type { DealScored } from '@/lib/korter/score';
-import type { KorterListing, KorterSource } from '@/lib/korter/types';
+import type { ProviderRunStatus, UnifiedListing } from '@/lib/providers/types'
 
-export type ScoredListing = Omit<KorterListing, 'actualizeTime'> & {
-  /** ISO timestamp over the wire (Date only exists server-side). */
-  actualizeTime: string;
-} & DealScored;
+/** One merged + scored listing in the feed. */
+export type ScoredListing = UnifiedListing & {
+  /** 0..100, higher = cheaper per m². */
+  score: number
+  basis: 'district' | 'city' | 'none'
+}
 
 /** GET /api/explore response envelope. */
 export type ExploreResponse = {
-  listings: ScoredListing[];
-  source: KorterSource;
-  offset: number;
-  limit: number;
-};
+  listings: ScoredListing[]
+  sources: ProviderRunStatus[]
+  total: number
+  fetchedAt: string
+  cached: boolean
+  offset: number
+  limit: number
+}
 
 /** GET /api/districts response envelope. */
 export type DistrictsResponse = {
