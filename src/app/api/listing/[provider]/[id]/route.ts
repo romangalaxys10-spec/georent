@@ -1,6 +1,5 @@
 /**
- * /api/listing/[provider]/[id] — LIVE offer detail, fetched from the source
- * site on every call (real-time sync contract), with price-drop tracking
+ * /api/listing/[provider]/[id] — LIVE offer detail with price-drop tracking
  * persisted per provider:
  *   - korter → Listing table (objectId Int, shared with the scanner);
  *   - ss / myhome → RemoteListing table (id "provider:remoteId").
@@ -8,14 +7,20 @@
  * GET /api/listing/ss/25954411
  * GET /api/listing/korter/897847?url=%2Fbinebis...%2F897847   (card link hint
  *      — skips the recent-cards scan fallback)
+ * GET ...?fresh=1   — bypass the 45s micro-cache (manual "Sync now")
  *
- * Response: UnifiedDetail + { tracked: { minPriceUsd, priceDrops, firstSeenAt,
- * lastSeenAt, previousPriceUsd? } } — 404 when the source says gone.
+ * Real-time sync contract is preserved: TTL 45s < the client's 60s auto-sync,
+ * so scheduled refreshes still reach the source; manual sync is always fresh.
+ * On upstream failure the last good copy is served (stale) — never a 502
+ * when we have data.
+ *
+ * Response: UnifiedDetail + { tracked, cached, stale } — 404 when the source
+ * says gone.
  */
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { fetchUnifiedDetail } from '@/lib/providers/index'
-import type { UnifiedDetail } from '@/lib/providers/index'
+import { fetchDetailCached, patchDetailCache } from '@/lib/providers/detail-cache'
+import type { UnifiedDetail } from '@/lib/providers/detail-cache'
 
 const VALID_PROVIDERS = new Set(['korter', 'ss', 'myhome'])
 
@@ -131,20 +136,34 @@ export async function GET(
     if (!/^[0-9]{1,12}$/.test(id)) {
       return NextResponse.json({ error: 'invalid id' }, { status: 400 })
     }
-    const urlHint = new URL(request.url).searchParams.get('url') ?? undefined
+    const params = new URL(request.url).searchParams
+    const urlHint = params.get('url') ?? undefined
+    const fresh = params.get('fresh') === '1'
 
-    const detail = await fetchUnifiedDetail(
+    const { payload, fromCache, stale } = await fetchDetailCached(
       provider as 'korter' | 'ss' | 'myhome',
       id,
-      urlHint,
+      { hint: urlHint, fresh },
     )
-    const tracked =
-      provider === 'korter' ? await trackKorter(detail) : await trackRemote(detail)
 
-    return NextResponse.json({ ...detail, tracked })
+    // Persist price-drop tracking only when the source was actually hit;
+    // cache hits replay the tracked data stored with the payload.
+    let tracked = payload.tracked
+    if (!fromCache) {
+      tracked =
+        provider === 'korter'
+          ? await trackKorter(payload)
+          : await trackRemote(payload)
+      patchDetailCache(provider, id, { tracked })
+    }
+
+    return NextResponse.json(
+      { ...payload, tracked, cached: fromCache, stale },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    const status = /not found/i.test(message) ? 404 : 502
+    const status = /not found/i.test(message) ? 404 : 504
     return NextResponse.json(
       { error: status === 404 ? 'not_found' : 'upstream', message },
       { status },

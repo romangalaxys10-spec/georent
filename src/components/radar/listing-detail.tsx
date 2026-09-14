@@ -41,9 +41,42 @@ type DetailPayload = UnifiedDetail & {
     priceDrops?: number;
     firstSeenAt?: string;
   };
+  cached?: boolean;
+  stale?: boolean;
 };
 
 const SYNC_INTERVAL_MS = 60_000;
+const SESSION_PREFIX = 'dealradar-detail:';
+
+/** Last-good payload per offer for instant paint on back-nav/reload. */
+function readSessionDetail(key: string): DetailPayload | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_PREFIX + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DetailPayload;
+    return parsed && typeof parsed === 'object' && parsed.listing ? parsed : null;
+  } catch {
+    return null; // private mode / quota — paint is just slower, never broken
+  }
+}
+
+function writeSessionDetail(key: string, payload: DetailPayload) {
+  try {
+    sessionStorage.setItem(SESSION_PREFIX + key, JSON.stringify(payload));
+    // Bound quota: keep at most 8 offer payloads per session.
+    const ours: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k?.startsWith(SESSION_PREFIX)) ours.push(k);
+    }
+    while (ours.length > 8) {
+      const drop = ours.shift();
+      if (drop) sessionStorage.removeItem(drop);
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 const PROVIDER_LABEL: Record<string, string> = {
   korter: 'Korter',
@@ -124,14 +157,23 @@ function ParamCell({ label, value }: { label: string; value: string | null | und
   );
 }
 
-export function ListingDetail({ provider, id }: { provider: string; id: string }) {
+export function ListingDetail({
+  provider,
+  id,
+  initialDetail = null,
+}: {
+  provider: string;
+  id: string;
+  /** SSR fast path: server micro-cache hit → paint real content instantly. */
+  initialDetail?: DetailPayload | null;
+}) {
   const { t, locale } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlHint = searchParams.get('url') ?? undefined;
 
-  const [data, setData] = useState<DetailPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<DetailPayload | null>(initialDetail);
+  const [loading, setLoading] = useState(initialDetail === null);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -143,14 +185,34 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
   const syncRef = useRef<() => void>(() => {});
   const syncedAtRef = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
+  const hasDataRef = useRef(initialDetail !== null);
   const photoCount = data?.photos.length ?? 0;
 
   const load = useCallback(
-    async (isAuto: boolean) => {
-      if (isAuto) setSyncing(true);
+    async (mode: 'initial' | 'auto' | 'manual') => {
+      if (mode !== 'initial') setSyncing(true);
       setError(null);
       try {
-        const qs = urlHint ? `?url=${encodeURIComponent(urlHint)}` : '';
+        // Instant paint from sessionStorage while revalidating (first visit
+        // in this tab, no SSR cache hit). Skeleton only on true cold loads.
+        if (mode === 'initial' && !hasDataRef.current) {
+          const cached = readSessionDetail(`${provider}:${id}`);
+          if (cached) {
+            setData(cached);
+            setLoading(false);
+            setSyncing(true);
+            setPhotoIdx(0);
+          }
+        }
+        // Only the explicit "Sync now" button bypasses the server micro-cache;
+        // initial + 60s auto syncs stay cache-eligible (TTL 45s < 60s, so the
+        // source is still reached on every scheduled refresh).
+        const fresh = mode === 'manual' ? 'fresh=1' : '';
+        const qs = urlHint
+          ? `?url=${encodeURIComponent(urlHint)}${fresh ? `&${fresh}` : ''}`
+          : fresh
+            ? `?${fresh}`
+            : '';
         const res = await fetch(`/api/listing/${provider}/${id}${qs}`);
         if (res.status === 404) {
           setNotFound(true);
@@ -163,6 +225,8 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
         const payload = json as DetailPayload;
         if ('error' in payload) throw new Error(String(payload.error));
         setData(payload);
+        hasDataRef.current = true;
+        writeSessionDetail(`${provider}:${id}`, payload);
         const now = Date.now();
         setSyncedAt(now);
         syncedAtRef.current = now;
@@ -177,18 +241,18 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
     [provider, id, urlHint],
   );
 
-  syncRef.current = () => void load(true);
+  syncRef.current = () => void load('manual');
 
   // Initial load + auto-sync loop (visible tabs only).
   useEffect(() => {
-    void load(false);
+    void load('initial');
     const id2 = setInterval(() => {
-      if (document.visibilityState === 'visible') syncRef.current();
+      if (document.visibilityState === 'visible') void load('auto');
     }, SYNC_INTERVAL_MS);
     const onVisible = () => {
       const at = syncedAtRef.current;
       if (document.visibilityState === 'visible' && at && Date.now() - at > SYNC_INTERVAL_MS) {
-        syncRef.current();
+        void load('auto');
       }
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -204,6 +268,17 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
     const id2 = setInterval(() => tick((n) => n + 1), 15_000);
     return () => clearInterval(id2);
   }, []);
+
+  // SSR cache-hit path: derive honest sync age from the payload itself.
+  useEffect(() => {
+    if (initialDetail?.syncedAt) {
+      const at = Date.parse(initialDetail.syncedAt);
+      if (Number.isFinite(at)) {
+        setSyncedAt(at);
+        syncedAtRef.current = at;
+      }
+    }
+  }, [initialDetail]);
 
   // Gallery keyboard nav.
   useEffect(() => {
@@ -294,7 +369,7 @@ export function ListingDetail({ provider, id }: { provider: string; id: string }
         <p className="font-mono text-[12px] text-danger">{t('common.error')} — {error}</p>
         <button
           type="button"
-          onClick={() => void load(false)}
+          onClick={() => void load('manual')}
           className="h-9 rounded-md border border-danger/40 px-4 text-[13px] text-danger transition-colors hover:bg-danger-dim"
         >
           {t('common.retry')}
