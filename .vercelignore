@@ -1,0 +1,26 @@
+# Never upload local secrets, data, tooling or build artifacts to Vercel
+.env
+.env.*
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+.smart/
+.github/
+.devcontainer/
+
+db/
+mini-services/
+scripts/
+upload/
+
+worklog.md
+dev.log
+server.log
+audit-report.md
+
+node_modules/
+.next/
+.vercel/
+coverage/
