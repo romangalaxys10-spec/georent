@@ -19,6 +19,7 @@
  * are applied honestly as post-filters here and flagged in the run status.
  */
 import type {
+  DealType,
   ProviderName,
   ProviderRunStatus,
   UnifiedDetail,
@@ -188,6 +189,7 @@ export function normalizeTnetCard(
   const rooms = Number(card.room ?? 0) || 0
   const bedrooms = Number(card.bedroom ?? 0) || undefined
   const title = card.dynamic_title?.trim() || `${rooms} room apartment`
+  const deal: DealType = card.deal_type_id === 2 ? 'rent' : 'buy'
   const place =
     card.district_name?.trim() ||
     card.urban_name?.trim() ||
@@ -223,6 +225,7 @@ export function normalizeTnetCard(
     updatedAt: georgiaTimeToIso(card.last_updated),
     sourceUrl: tnetSourceUrl(websiteKey, card),
     isVip: Boolean(card.is_vip || card.is_vip_plus || card.is_super_vip),
+    deal,
   }
 }
 
@@ -263,7 +266,8 @@ function buildQuery(
 ): URLSearchParams {
   const sp = new URLSearchParams()
   sp.set('currency_id', '1')
-  sp.set('deal_types', '1')
+  // deal_types: 1 = sale, 2 = rent (monthly prices) — verified live on both keys.
+  sp.set('deal_types', f.deal === 'rent' ? '2' : '1')
   sp.set('real_estate_types', '1')
   sp.set('cities', String(TNET_CITY_IDS[f.cityId] ?? f.cityId))
   // API filters run in GEL (currency_id=1) — convert USD bounds.

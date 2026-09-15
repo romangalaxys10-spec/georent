@@ -25,6 +25,9 @@ import {
   type SeenEntry,
 } from './match';
 
+// Re-exported for consumers (use-demo) — the store is the demo data layer.
+export type { DemoAlert, SeenEntry };
+
 export type DemoNotification = {
   id: string;
   alertId: string | null;

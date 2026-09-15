@@ -28,6 +28,7 @@ import {
 } from './tnet'
 import { KorterDetailError, fetchKorterDetail } from './korter-detail'
 import type {
+  DealType,
   ProviderName,
   ProviderRunStatus,
   UnifiedDetail,
@@ -50,13 +51,15 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   korter: 'Korter',
   ss: 'SS.ge',
   myhome: 'MyHome',
+  local: 'Local',
 }
 
 /** KorterListing → UnifiedListing (prices are already USD at korter). */
-function unifyKorter(l: KorterListing): UnifiedListing {
+function unifyKorter(l: KorterListing, deal: DealType = 'buy'): UnifiedListing {
   return {
     key: `korter:${l.objectId}`,
     provider: 'korter',
+    deal,
     objectId: String(l.objectId),
     title: `${l.roomCount} BR${l.buildingName ? ` · ${l.buildingName}` : ''}`,
     priceUsd: l.price,
@@ -165,6 +168,7 @@ export type SearchAllOptions = {
 function toKorterFilters(f: UnifiedFilters, page: number): KorterFilters {
   return {
     cityId: f.cityId,
+    deal: f.deal,
     districtIds: f.districtIds,
     roomCounts: f.roomCounts,
     minPrice: f.minPrice,
@@ -187,7 +191,7 @@ async function runProvider(
     pages.map(async (page) => {
       if (provider === 'korter') {
         const { listings } = await fetchCards(toKorterFilters(f, page))
-        return listings.map(unifyKorter)
+        return listings.map((l) => unifyKorter(l, f.deal ?? 'buy'))
       }
       if (isTnet(provider)) {
         const page_ = await fetchTnetPage(provider, f)
@@ -286,37 +290,47 @@ export async function searchAllProviders(
 
   const merged = mergeCrossSource(all)
 
-  // Deal scores over the merged batch (percentile of ppsm, district shrinkage).
-  const scored = computeDealScores(
-    merged.map((l) => ({ districtName: l.districtName ?? null, ppsm: l.ppsmUsd })),
-  )
-  const listings = merged.map((l, i) => ({
-    ...l,
-    score: scored[i]?.score ?? 0,
-    basis: scored[i]?.basis ?? 'none',
-  }))
-
   return {
-    listings,
+    listings: attachScores(merged),
     statuses: enabled.map((p) => statuses.find((s) => s.id === p)!),
     cached: false,
     fetchedAt: new Date().toISOString(),
   }
 }
 
+/**
+ * Deal scores over a merged batch (percentile of ppsm, district shrinkage).
+ * Exported so the explore route can re-score after merging local owner ads
+ * into the scraped batch — every listing must carry score/basis (the card's
+ * score ring and the client-side "best deal" sort both read them).
+ */
+export function attachScores<
+  T extends { districtName?: string | null; ppsmUsd: number },
+>(merged: T[]): (T & { score: number; basis: string })[] {
+  const scored = computeDealScores(
+    merged.map((l) => ({ districtName: l.districtName ?? null, ppsm: l.ppsmUsd })),
+  )
+  return merged.map((l, i) => ({
+    ...l,
+    score: scored[i]?.score ?? 0,
+    basis: scored[i]?.basis ?? 'none',
+  }))
+}
+
 /** ---------- detail dispatch ---------- */
 
 /** Find a korter card by objectId across the first pages of the cards API. */
-async function findKorterCard(objectId: string): Promise<UnifiedListing | null> {
+async function findKorterCard(objectId: string, deal: DealType = 'buy'): Promise<UnifiedListing | null> {
   for (const page of [1, 2, 3]) {
     try {
       const { listings } = await fetchCards({
         cityId: 1,
+        deal,
         offset: (page - 1) * 20,
         limit: 20,
       })
       const hit = listings.find((l) => String(l.objectId) === objectId)
-      if (hit) return unifyKorter(hit)
+      if (hit) return unifyKorter(hit, deal)
     } catch {
       return null
     }
@@ -333,16 +347,23 @@ export async function fetchUnifiedDetail(
   provider: ProviderName,
   objectId: string,
   sourceUrlHint?: string,
+  deal: DealType = 'buy',
 ): Promise<UnifiedDetail> {
   if (isTnet(provider)) {
     const detail = await fetchTnetDetail(provider, objectId)
-    const history = await fetchTnetPriceHistory(provider, objectId)
+    // tnet market ppsm history is a sale-side metric — rent items often
+    // error out on it, so skip it for rent.
+    const history =
+      detail.listing.deal === 'rent'
+        ? []
+        : ((await fetchTnetPriceHistory(provider, objectId)) ?? [])
     return { ...detail, priceHistory: history }
   }
   // Korter: need the listing link → hint, else scan recent cards.
   const base: UnifiedListing = {
     key: `korter:${objectId}`,
     provider: 'korter',
+    deal,
     objectId,
     title: '',
     priceUsd: 0,
@@ -358,7 +379,7 @@ export async function fetchUnifiedDetail(
   }
   let hint = sourceUrlHint
   if (!hint) {
-    const found = await findKorterCard(objectId)
+    const found = await findKorterCard(objectId, deal)
     if (!found) throw new KorterDetailError('listing not found in recent cards', 404)
     Object.assign(base, found)
     hint = found.sourceUrl

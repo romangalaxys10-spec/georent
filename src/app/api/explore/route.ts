@@ -25,6 +25,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { fetchDistricts } from '@/lib/korter/adapter'
+import { fetchLocalAds } from '@/lib/local-ads'
+import { attachScores } from '@/lib/providers'
 import {
   searchAllProviders,
   type ProviderName,
@@ -56,7 +58,8 @@ const exploreQuerySchema = z.object({
   keyword: z.string().trim().max(60).optional(),
   newBuilding: z.boolean().optional(),
   hasBalcony: z.boolean().optional(),
-  sources: z.array(z.enum(['korter', 'ss', 'myhome'])).optional(),
+  sources: z.array(z.enum(['korter', 'ss', 'myhome', 'local'])).optional(),
+  deal: z.enum(['buy', 'rent']).optional(),
   sort: z.enum(SORT_VALUES).default('update_time_desc'),
   offset: z.number().int().min(0).default(0),
   limit: z.number().int().min(1).max(40).default(20),
@@ -97,6 +100,7 @@ function csvIntsParam(sp: URLSearchParams, key: string): number[] | undefined {
 function canonicalKey(q: ExploreQuery): string {
   return JSON.stringify({
     cityId: q.cityId,
+    deal: q.deal ?? 'buy',
     districts: [...(q.districtIds ?? [])].sort((a, b) => a - b),
     rooms: [...(q.roomCounts ?? [])].sort((a, b) => a - b),
     bedrooms: [...(q.bedrooms ?? [])].sort((a, b) => a - b),
@@ -164,8 +168,9 @@ export async function GET(request: Request) {
             .get('sources')!
             .split(',')
             .map((s) => s.trim())
-            .filter((s): s is ProviderName => s === 'korter' || s === 'ss' || s === 'myhome')
+            .filter((s): s is ProviderName => s === 'korter' || s === 'ss' || s === 'myhome' || s === 'local')
         : undefined,
+      deal: sp.get('deal') === 'rent' ? 'rent' : sp.get('deal') === 'buy' ? 'buy' : undefined,
       sort: sp.get('sort') ?? undefined,
       offset: numberParam(sp, 'offset') ?? 0,
       limit: numberParam(sp, 'limit') ?? 20,
@@ -181,7 +186,7 @@ export async function GET(request: Request) {
     let districtNames: string[] | undefined
     if (q.districtIds && q.districtIds.length > 0) {
       try {
-        const districts = await fetchDistricts(q.cityId)
+        const districts = await fetchDistricts(q.cityId, q.deal ?? 'buy')
         const byId = new Map(districts.map((d) => [d.id, d.name]))
         districtNames = q.districtIds
           .map((id) => byId.get(id))
@@ -203,6 +208,7 @@ export async function GET(request: Request) {
       if (hit) cache().delete(key)
       const filters: UnifiedFilters = {
         cityId: q.cityId,
+        deal: q.deal,
         districtIds: q.districtIds,
         districtNames,
         roomCounts: q.roomCounts,
@@ -221,10 +227,69 @@ export async function GET(request: Request) {
         page: 1,
         perPage: q.limit,
       }
-      result = await searchAllProviders(filters, {
-        providers: q.sources,
-        maxPages: pagesFor(q.offset, q.limit),
-      })
+      const scrapedSources = q.sources?.filter((s) => s !== 'local')
+      if (scrapedSources && scrapedSources.length === 0) {
+        // Local-only request: skip the scraped fan-out entirely.
+        result = {
+          listings: [],
+          statuses: [],
+          cached: false,
+          fetchedAt: new Date().toISOString(),
+        }
+      } else {
+        try {
+          result = await searchAllProviders(
+            filters,
+            { providers: scrapedSources, maxPages: pagesFor(q.offset, q.limit) },
+          )
+        } catch (err) {
+          // Every scraped source down — local ads (added below) still serve.
+          console.error('[explore] all scraped sources failed:', err)
+          result = {
+            listings: [],
+            statuses: [],
+            cached: false,
+            fetchedAt: new Date().toISOString(),
+          }
+        }
+      }
+
+      // Local owner ads join the same pipeline (unless explicitly excluded).
+      const wantsLocal = !q.sources || q.sources.includes('local')
+      if (wantsLocal) {
+        try {
+          const local = await fetchLocalAds({
+            deal: q.deal,
+            cityName: q.cityId === 1 ? 'Tbilisi' : q.cityId === 2 ? 'Batumi' : undefined,
+            districtNames,
+            roomCounts: q.roomCounts,
+            minPrice: q.minPrice,
+            maxPrice: q.maxPrice,
+            minArea: q.minArea,
+            maxArea: q.maxArea,
+            take: 24,
+          })
+          result.listings.unshift(...local)
+          result.statuses = [
+            ...result.statuses,
+            {
+              id: 'local',
+              label: 'Local',
+              status: 'ok',
+              count: local.length,
+              total: local.length,
+              durationMs: 0,
+            },
+          ]
+          // Re-score over the combined batch so local owner ads carry the same
+          // deal score / basis the scraped cards have (score ring + best-deal
+          // sort both read these; missing score rendered as NaN).
+          result.listings = attachScores(result.listings)
+        } catch {
+          // DB hiccup — feed still serves the scraped sources.
+        }
+      }
+
       result.listings = sortListings(result.listings, q.sort)
       const store = cache()
       while (store.size >= CACHE_MAX_ENTRIES) {

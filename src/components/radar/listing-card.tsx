@@ -29,13 +29,13 @@ function freshness(updatedAt: string): { label: string; fresh: boolean } {
   return { label: `${Math.floor(age / DAY)}D`, fresh: false };
 }
 
-const PROVIDER_META: Record<
-  ScoredListing['provider'],
-  { label: string; dot: string }
+const PROVIDER_META: Partial<
+  Record<ScoredListing['provider'], { label: string; dot: string }>
 > = {
   korter: { label: 'Korter', dot: 'bg-signal' },
   ss: { label: 'SS.ge', dot: 'bg-[#E8A03C]' },
   myhome: { label: 'MyHome', dot: 'bg-[#7A9E7E]' },
+  local: { label: 'LOCAL', dot: 'bg-[#E8A03C]' },
 };
 
 function scoreLabelKey(
@@ -54,7 +54,7 @@ export function ListingCard({ listing: l }: { listing: ScoredListing }) {
 
   const fresh = freshness(l.updatedAt);
   const isNew = Date.now() - new Date(l.updatedAt).getTime() < DAY;
-  const providerMeta = PROVIDER_META[l.provider] ?? PROVIDER_META.korter;
+  const providerMeta = PROVIDER_META[l.provider] ?? { label: l.provider, dot: "bg-faint" };
 
   const ppsm = l.ppsmUsd > 0 ? formatPrice(Math.round(l.ppsmUsd), locale) : null;
   const isStudio = l.roomCount === 1 && l.area < 45;
@@ -132,7 +132,11 @@ export function ListingCard({ listing: l }: { listing: ScoredListing }) {
           >
             {formatPrice(l.priceUsd, locale)}
           </Link>
-          {ppsm ? (
+          {l.deal === 'rent' ? (
+            <span className="font-mono text-[12px] leading-none text-muted tnum">
+              {t('listing.perMonthShort')}
+            </span>
+          ) : ppsm ? (
             <span className="font-mono text-[12px] leading-none text-muted tnum">
               {ppsm} {t('listing.perm2')}
             </span>

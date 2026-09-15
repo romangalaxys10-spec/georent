@@ -46,10 +46,15 @@ export type KorterSort =
   | 'price_desc'
   | 'price_sqm_asc'
 
+/** Deal type — rent cards live under /cards/rent, sale under /cards/sale. */
+export type KorterDeal = 'buy' | 'rent'
+
 /** Filter set for fetchCards — maps 1:1 onto korter query params. */
 export type SearchFilters = {
   /** Main city geo id (1=Tbilisi, 2=Batumi). */
   cityId: number
+  /** buy (default) or rent — selects the cards endpoint + SSR listing page. */
+  deal?: KorterDeal
   /** Korter district geo ids — comma-joined into geo_object_ids. */
   districtIds?: number[]
   /** Room counts — comma-joined into room_counts (COMMA-SEPARATED, NOT brackets!). */

@@ -27,7 +27,9 @@ import {
   Eye,
   Layers,
   Link2,
+  MessageCircle,
   RefreshCw,
+  Send,
   TrendingDown,
 } from 'lucide-react';
 
@@ -82,6 +84,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   korter: 'Korter',
   ss: 'SS.ge',
   myhome: 'MyHome',
+  local: 'Local',
 };
 
 /** Strip source HTML down to safe plain text with line breaks. */
@@ -180,6 +183,10 @@ export function ListingDetail({
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [interestOpen, setInterestOpen] = useState(false);
+  const [interestSent, setInterestSent] = useState(false);
+  const [interestBusy, setInterestBusy] = useState(false);
+  const [interestError, setInterestError] = useState<string | null>(null);
   const [, tick] = useState(0);
 
   const syncRef = useRef<() => void>(() => {});
@@ -243,9 +250,11 @@ export function ListingDetail({
 
   syncRef.current = () => void load('manual');
 
-  // Initial load + auto-sync loop (visible tabs only).
+  // Initial load + auto-sync loop (scraped sources only — local ads are
+  // served from our own DB, there is nothing external to re-sync).
   useEffect(() => {
     void load('initial');
+    if (provider === 'local') return;
     const id2 = setInterval(() => {
       if (document.visibilityState === 'visible') void load('auto');
     }, SYNC_INTERVAL_MS);
@@ -261,7 +270,7 @@ export function ListingDetail({
       document.removeEventListener('visibilitychange', onVisible);
     };
      
-  }, [load]);
+  }, [load, provider]);
 
   // "Synced Xs ago" ticker (15s resolution).
   useEffect(() => {
@@ -309,6 +318,34 @@ export function ListingDetail({
       /* clipboard unavailable — ignore */
     }
   }, []);
+
+  const submitInterest = useCallback(
+    async (form: { name: string; phone: string; message: string }) => {
+      setInterestBusy(true);
+      setInterestError(null);
+      try {
+        const res = await fetch(`/api/ads/${id}/interest`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(form),
+        });
+        const json: unknown = await res.json().catch(() => null);
+        if (!res.ok) {
+          const msg =
+            json && typeof json === 'object' && 'error' in json
+              ? String((json as { error: unknown }).error)
+              : `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+        setInterestSent(true);
+      } catch (err) {
+        setInterestError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setInterestBusy(false);
+      }
+    },
+    [id],
+  );
 
   // Gallery touch swipe (mobile): horizontal fling advances the photo.
   const onGalleryTouchStart = (e: React.TouchEvent) => {
@@ -393,6 +430,33 @@ export function ListingDetail({
         ? t('detail.developer')
         : t('detail.agency');
 
+  // Local ads store enums ('new' | 'renovated' | 'old' | 'under_construction');
+  // scraped sources may pass free text — translate known enums, else show raw.
+  type ConditionKey = 'condition.new' | 'condition.renovated' | 'condition.old' | 'condition.under';
+  type FurnishedKey = 'furnished.yes' | 'furnished.no' | 'furnished.partial';
+  const CONDITION_KEYS: Partial<Record<string, ConditionKey>> = {
+    new: 'condition.new',
+    renovated: 'condition.renovated',
+    old: 'condition.old',
+    under_construction: 'condition.under',
+    under: 'condition.under',
+  };
+  const conditionLabel = (c: string | undefined): string | null => {
+    if (!c) return null;
+    const key = CONDITION_KEYS[c.trim().toLowerCase()];
+    return key ? t(key) : c;
+  };
+  const FURNISHED_KEYS: Partial<Record<string, FurnishedKey>> = {
+    yes: 'furnished.yes',
+    no: 'furnished.no',
+    partial: 'furnished.partial',
+  };
+  const furnishedLabel = (f: string | undefined): string | null => {
+    if (!f) return null;
+    const key = FURNISHED_KEYS[f.trim().toLowerCase()];
+    return key ? t(key) : f;
+  };
+
   const params: { label: string; value: string | null | undefined }[] = [
     { label: t('filters.rooms'), value: l.roomCount > 0 ? String(l.roomCount) : null },
     { label: t('filters.area'), value: l.area > 0 ? `${Math.round(l.area * 10) / 10} m²` : null },
@@ -407,7 +471,8 @@ export function ListingDetail({
             : String(l.floor)
           : null,
     },
-    { label: t('detail.condition'), value: data.params.condition },
+    { label: t('detail.condition'), value: conditionLabel(data.params.condition) },
+    { label: t('ads.furnished'), value: furnishedLabel(data.params.furnished ?? data.local?.furnished) },
     { label: t('detail.buildYear'), value: data.params.buildYear ? String(data.params.buildYear) : null },
     {
       label: t('detail.balcony'),
@@ -440,25 +505,36 @@ export function ListingDetail({
           {t('detail.backToFeed')}
         </Link>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
-            <span aria-hidden className="size-[6px] shrink-0 animate-pulse-dot rounded-full bg-signal" />
-            <span className="truncate">
-              {t('detail.liveSync')}
-              {syncedAgo ? <span className="text-faint normal-case tracking-normal">· {syncedAgo}</span> : null}
+          {l.provider === 'local' ? (
+            <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
+              <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-signal" />
+              {t('detail.ownerListing')}
             </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => syncRef.current()}
-            disabled={syncing}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted transition-colors hover:border-signal/50 hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3 ${syncing ? 'animate-spin' : ''}`} aria-hidden />
-            {syncing ? t('detail.syncing') : t('detail.syncNow')}
-          </button>
+          ) : (
+            <>
+              <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
+                <span aria-hidden className="size-[6px] shrink-0 animate-pulse-dot rounded-full bg-signal" />
+                <span className="truncate">
+                  {t('detail.liveSync')}
+                  {syncedAgo ? <span className="text-faint normal-case tracking-normal">· {syncedAgo}</span> : null}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => syncRef.current()}
+                disabled={syncing}
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted transition-colors hover:border-signal/50 hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <RefreshCw className={`size-3 ${syncing ? 'animate-spin' : ''}`} aria-hidden />
+                {syncing ? t('detail.syncing') : t('detail.syncNow')}
+              </button>
+            </>
+          )}
         </div>
       </div>
-      <p className="micro mt-2 text-faint">{t('detail.autoSync')}</p>
+      <p className="micro mt-2 text-faint">
+        {l.provider === 'local' ? t('detail.ownerListingSub') : t('detail.autoSync')}
+      </p>
 
       {/*
         Grid: mobile = one minmax(0,1fr) column in DOM order (gallery →
@@ -550,15 +626,20 @@ export function ListingDetail({
               <div>
                 <div className="font-mono text-[28px] font-semibold leading-none tracking-[-0.01em] text-text tnum">
                   {formatPrice(l.priceUsd, locale)}
+                  {l.deal === 'rent' ? (
+                    <span className="ms-1.5 font-mono text-[13px] font-normal text-muted">{t('listing.perMonth')}</span>
+                  ) : null}
                 </div>
                 {l.currency === 'GEL' ? (
                   <div className="mt-1.5 font-mono text-[12px] text-muted tnum">
                     ≈ {formatPrice(Math.round(l.priceNative), locale)} GEL
                   </div>
                 ) : null}
-                <div className="mt-1.5 font-mono text-[13px] text-muted tnum">
-                  {l.ppsmUsd > 0 ? `${formatPrice(Math.round(l.ppsmUsd), locale)} ${t('listing.perm2')}` : '—'}
-                </div>
+                {l.deal !== 'rent' ? (
+                  <div className="mt-1.5 font-mono text-[13px] text-muted tnum">
+                    {l.ppsmUsd > 0 ? `${formatPrice(Math.round(l.ppsmUsd), locale)} ${t('listing.perm2')}` : '—'}
+                  </div>
+                ) : null}
               </div>
               {priceDrop ? (
                 <span className="flex items-center gap-1 rounded-md bg-danger-dim px-2 py-1 font-mono text-[11px] font-semibold text-danger">
@@ -586,8 +667,8 @@ export function ListingDetail({
               </span>
             </div>
 
-            {/* Market ppsm sparkline */}
-            {data.priceHistory && data.priceHistory.length > 2 ? (
+            {/* Market ppsm sparkline (sale-side metric — hidden for rent) */}
+            {l.deal !== 'rent' && data.priceHistory && data.priceHistory.length > 2 ? (
               <div className="mt-4 border-t border-border pt-3">
                 <div className="micro text-faint">{t('detail.priceHistory')}</div>
                 <Sparkline data={data.priceHistory} current={l.ppsmUsd} />
@@ -658,15 +739,30 @@ export function ListingDetail({
 
           {/* Actions */}
           <div className="flex flex-col gap-2">
-            <a
-              href={l.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-11 items-center justify-center gap-2 rounded-md bg-signal font-medium text-[14px] text-[#0B0E0C] transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              {t('detail.viewOnSource', { site })}
-              <ArrowUpRight className="size-4 rtl:rotate-180" aria-hidden />
-            </a>
+            {l.provider === 'local' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setInterestSent(false);
+                  setInterestError(null);
+                  setInterestOpen(true);
+                }}
+                className="flex h-11 items-center justify-center gap-2 rounded-md bg-signal font-medium text-[14px] text-[#0B0E0C] transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <MessageCircle className="size-4" aria-hidden />
+                {t('detail.imInterested')}
+              </button>
+            ) : (
+              <a
+                href={l.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-11 items-center justify-center gap-2 rounded-md bg-signal font-medium text-[14px] text-[#0B0E0C] transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {t('detail.viewOnSource', { site })}
+                <ArrowUpRight className="size-4 rtl:rotate-180" aria-hidden />
+              </a>
+            )}
             <button
               type="button"
               onClick={() => void copyLink()}
@@ -703,18 +799,165 @@ export function ListingDetail({
             </div>
             <div className="micro mt-1 truncate text-faint">
               {site}
-              {l.ppsmUsd > 0 ? ` · ${formatPrice(Math.round(l.ppsmUsd), locale)}/m²` : ''}
+              {l.deal !== 'rent' && l.ppsmUsd > 0 ? ` · ${formatPrice(Math.round(l.ppsmUsd), locale)}/m²` : ''}
             </div>
           </div>
-          <a
-            href={l.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ms-auto flex h-10 shrink-0 items-center rounded-md bg-signal px-4 text-[13px] font-medium text-[#0B0E0C] transition-[filter] active:brightness-110"
-          >
-            <span className="truncate">{t('detail.viewOnSource', { site })}</span>
-          </a>
+          {l.provider === 'local' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setInterestSent(false);
+                setInterestError(null);
+                setInterestOpen(true);
+              }}
+              className="ms-auto flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-signal px-4 text-[13px] font-medium text-[#0B0E0C] transition-[filter] active:brightness-110"
+            >
+              <MessageCircle className="size-3.5" aria-hidden />
+              <span className="truncate">{t('detail.imInterested')}</span>
+            </button>
+          ) : (
+            <a
+              href={l.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ms-auto flex h-10 shrink-0 items-center rounded-md bg-signal px-4 text-[13px] font-medium text-[#0B0E0C] transition-[filter] active:brightness-110"
+            >
+              <span className="truncate">{t('detail.viewOnSource', { site })}</span>
+            </a>
+          )}
         </div>
+      </div>
+
+      {/* Interest dialog (local ads) — mobile-first bottom sheet on phones */}
+      {interestOpen && l.provider === 'local' ? (
+        <InterestDialog
+          onClose={() => setInterestOpen(false)}
+          onSubmit={submitInterest}
+          busy={interestBusy}
+          sent={interestSent}
+          error={interestError}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** "I'm interested" lead form for owner-published ads. */
+function InterestDialog({
+  onClose,
+  onSubmit,
+  busy,
+  sent,
+  error,
+}: {
+  onClose: () => void;
+  onSubmit: (form: { name: string; phone: string; message: string }) => void;
+  busy: boolean;
+  sent: boolean;
+  error: string | null;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [message, setMessage] = useState('');
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('detail.imInterested')}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-t-2xl border border-border bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[16px] font-semibold text-text">{t('detail.imInterested')}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            className="flex size-8 items-center justify-center rounded-md border border-border text-muted transition-colors hover:text-text"
+          >
+            ✕
+          </button>
+        </div>
+
+        {sent ? (
+          <div className="mt-5 flex flex-col items-center gap-3 py-6 text-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-signal/15">
+              <Check className="size-6 text-signal" aria-hidden />
+            </span>
+            <p className="text-[15px] font-medium text-text">{t('detail.interestSent')}</p>
+            <p className="text-[13px] text-muted">{t('detail.interestSentBody')}</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-2 h-10 rounded-md border border-border px-5 text-[13px] text-muted transition-colors hover:text-text"
+            >
+              {t('common.close')}
+            </button>
+          </div>
+        ) : (
+          <form
+            className="mt-4 flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSubmit({ name, phone, message });
+            }}
+          >
+            <div>
+              <label htmlFor="interest-name" className="micro text-faint">{t('detail.yourName')}</label>
+              <input
+                id="interest-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                minLength={2}
+                className="mt-1.5 h-11 w-full rounded-md border border-border bg-raised px-3 text-[14px] text-text placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                placeholder={t('detail.yourNamePlaceholder')}
+              />
+            </div>
+            <div>
+              <label htmlFor="interest-phone" className="micro text-faint">{t('detail.yourPhone')}</label>
+              <input
+                id="interest-phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                inputMode="tel"
+                dir="ltr"
+                className="mt-1.5 h-11 w-full rounded-md border border-border bg-raised px-3 font-mono text-[15px] text-text placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                placeholder="+995 5__ __ __ __"
+              />
+            </div>
+            <div>
+              <label htmlFor="interest-msg" className="micro text-faint">{t('detail.yourMessage')}</label>
+              <textarea
+                id="interest-msg"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={3}
+                maxLength={500}
+                className="mt-1.5 w-full resize-none rounded-md border border-border bg-raised px-3 py-2.5 text-[14px] text-text placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                placeholder={t('detail.yourMessagePlaceholder')}
+              />
+            </div>
+            {error ? (
+              <p className="font-mono text-[12px] text-danger">{t('common.error')} — {error}</p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={busy}
+              className="mt-1 flex h-11 items-center justify-center gap-2 rounded-md bg-signal text-[14px] font-medium text-[#0B0E0C] transition-[filter] hover:brightness-110 disabled:pointer-events-none disabled:opacity-60"
+            >
+              <Send className="size-4" aria-hidden />
+              {busy ? t('detail.sending') : t('detail.sendInterest')}
+            </button>
+            <p className="text-center text-[11px] text-faint">{t('detail.interestPrivacy')}</p>
+          </form>
+        )}
       </div>
     </div>
   );

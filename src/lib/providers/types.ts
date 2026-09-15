@@ -5,19 +5,25 @@
  * shapes at the adapter boundary — raw payloads never leak past this file.
  */
 
-export type ProviderName = 'korter' | 'ss' | 'myhome'
+export type ProviderName = 'korter' | 'ss' | 'myhome' | 'local'
 
 export const PROVIDERS: { id: ProviderName; label: string; site: string }[] = [
   { id: 'korter', label: 'Korter', site: 'korter.ge' },
   { id: 'ss', label: 'SS.ge', site: 'home.ss.ge' },
   { id: 'myhome', label: 'MyHome', site: 'myhome.ge' },
+  { id: 'local', label: 'Local', site: 'owner ads' },
 ]
+
+/** Buy (sale) or rent — rent prices are always monthly. */
+export type DealType = 'buy' | 'rent'
 
 /** One normalized listing card — the atom the whole app consumes. */
 export type UnifiedListing = {
   /** Stable per-provider id — "ss:25685152" style composite for UI keys. */
   key: string
   provider: ProviderName
+  /** buy (sale) or rent — rent prices are monthly. */
+  deal: DealType
   /** Raw numeric id inside the provider. */
   objectId: string
   title: string
@@ -98,6 +104,7 @@ export type UnifiedDetail = {
     storeroomArea?: number
     loggiaArea?: number
     porchArea?: number
+    furnished?: string
   }
   seller?: {
     name?: string
@@ -109,6 +116,12 @@ export type UnifiedDetail = {
   }
   views?: number
   createdAt?: string
+  /** Present only for provider=local — owner contact + interest CTA data. */
+  local?: {
+    contactName: string
+    contactPhone: string
+    furnished?: string
+  }
   /** Weekly market price history around this listing (tnet sources). */
   priceHistory?: { date: string; avgPpsmUsd: number; avgTotalUsd: number; samples: number }[]
   syncedAt: string
@@ -117,6 +130,8 @@ export type UnifiedDetail = {
 /** Filters shared by every provider search (USD prices, m² areas). */
 export type UnifiedFilters = {
   cityId: number
+  /** buy (default) or rent — threaded to every provider's endpoint params. */
+  deal?: DealType
   /** Korter district geo ids (korter live filter). */
   districtIds?: number[]
   districtNames?: string[]

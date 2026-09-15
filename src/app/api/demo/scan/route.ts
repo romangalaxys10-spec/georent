@@ -24,6 +24,7 @@ import {
   matchDemoAlert,
   type DemoAlert,
   type Observation,
+  type SeenEntry,
 } from '@/lib/demo/match'
 
 export const maxDuration = 30
@@ -97,7 +98,15 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'invalid body' }, { status: 400 })
     }
-    const alerts = parsed.data.alerts.filter((a) => a.active)
+    const alerts: DemoAlert[] = parsed.data.alerts
+      .filter((a) => a.active)
+      .map((a) => ({
+        ...a,
+        minPrice: a.minPrice ?? null,
+        maxPrice: a.maxPrice ?? null,
+        minArea: a.minArea ?? null,
+        maxArea: a.maxArea ?? null,
+      }))
     const seen = parsed.data.seen
 
     /** The old price for one objectId, when the baseline entry is well-formed. */
@@ -109,7 +118,7 @@ export async function POST(request: Request) {
       }
       return undefined
     }
-    const seenEntry = (objectId: number): { p?: number } | undefined => {
+    const seenEntry = (objectId: number): Pick<SeenEntry, 'p'> | undefined => {
       const p = seenPrice(objectId)
       return p === undefined ? undefined : { p }
     }

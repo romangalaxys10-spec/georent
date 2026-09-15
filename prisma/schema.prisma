@@ -121,3 +121,80 @@ model RemoteListing {
 
   @@index([provider, lastSeenAt])
 }
+
+// ---------------------------------------------------------------------------
+// Local ads — first-party owner listings (no external scraping involved)
+// ---------------------------------------------------------------------------
+
+// Registered user. Passwords are scrypt-hashed; apiToken is the SHA-256 of
+// the token handed out at signup/login (the raw token is never stored).
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  apiTokenHash String   @unique
+  createdAt    DateTime @default(now())
+
+  listings    LocalListing[]
+  tgChatId    String?  @unique
+  tgUsername  String?
+  tgPairedAt  DateTime?
+  tgPairCode  String?
+  tgPairCodeExpiresAt DateTime?
+
+  @@index([tgChatId])
+}
+
+// An owner-published apartment. Photos are stored as JSON array of
+// data-URIs (client-side compressed, ≤8 photos) or absolute URLs.
+model LocalListing {
+  id           String   @id @default(cuid())
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  deal         String   @default("buy") // "buy" | "rent"
+  title        String
+  description  String   @default("")
+  priceUsd     Float
+  area         Float
+  roomCount    Int      @default(0)
+  bedrooms     Int?
+  bathrooms    Int?
+  floor        Int?
+  floorCount   Int?
+  condition    String? // "new" | "renovated" | "old" | "under_construction"
+  furnished    String? // "yes" | "no" | "partial"
+  cityName     String   @default("Tbilisi")
+  districtName String
+  address      String?
+  lat          Float?
+  lng          Float?
+  photos       String   @default("[]") // JSON string array
+  contactName  String
+  contactPhone String
+
+  status       String   @default("active") // "active" | "paused"
+  views        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  interests Interest[]
+
+  @@index([status, deal, cityName])
+  @@index([ownerId, createdAt])
+}
+
+// A lead captured from the "I'm interested" button on a local ad.
+model Interest {
+  id        String   @id @default(cuid())
+  listingId String
+  listing   LocalListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String
+  message   String?
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  @@index([listingId, createdAt])
+}

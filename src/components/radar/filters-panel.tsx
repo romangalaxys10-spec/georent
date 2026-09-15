@@ -28,6 +28,8 @@ export type SortValue = 'update_time_desc' | 'price_asc' | 'price_sqm_asc' | 'sc
 
 export type FiltersState = {
   cityId: number;
+  /** buy (sale) or rent — rent prices are monthly. */
+  deal: 'buy' | 'rent';
   districts: number[];
   rooms: number[];
   minPrice?: number;
@@ -52,6 +54,7 @@ export type FiltersState = {
 
 export const DEFAULT_FILTERS: FiltersState = {
   cityId: 1,
+  deal: 'buy',
   districts: [],
   rooms: [],
   sort: 'update_time_desc',
@@ -158,6 +161,36 @@ export function FiltersPanel({
       <div className="flex items-center gap-2">
         <SlidersHorizontal className="size-3.5 text-faint" aria-hidden />
         <span className="micro text-muted">{t('filters.title')}</span>
+      </div>
+
+      {/* Deal type — buy vs rent (rent prices are monthly) */}
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionLabel>{t('search.dealTitle')}</SectionLabel>
+        <div
+          className="mt-2 flex h-10 items-center rounded-md border border-border bg-raised p-0.5"
+          role="radiogroup"
+          aria-label={t('search.dealTitle')}
+        >
+          {(
+            [
+              { id: 'buy' as const, label: t('search.dealBuy') },
+              { id: 'rent' as const, label: t('search.dealRent') },
+            ]
+          ).map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={value.deal === id}
+              onClick={() => onChange({ ...value, deal: id })}
+              className={`flex h-9 flex-1 items-center justify-center rounded px-3 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                value.deal === id ? 'bg-signal text-[#0B0E0C]' : 'text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Keyword */}

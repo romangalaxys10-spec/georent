@@ -4,6 +4,7 @@ import { AppHeader } from '@/components/radar/app-header';
 import { AppFooter } from '@/components/radar/app-footer';
 import { ListingDetail } from '@/components/radar/listing-detail';
 import { fetchDetailCached } from '@/lib/providers/detail-cache';
+import { fetchLocalDetail } from '@/lib/local-ads';
 
 /**
  * /listing/[provider]/[id] — dedicated offer page.
@@ -38,19 +39,30 @@ export default async function ListingPage({
   const sp = await searchParams;
   const rawHint = sp.url;
   const urlHint = Array.isArray(rawHint) ? rawHint[0] : rawHint;
+  const rawDeal = sp.deal;
+  const dealParam = (Array.isArray(rawDeal) ? rawDeal[0] : rawDeal) === 'rent' ? 'rent' : 'buy';
 
-  const valid =
+  const validScraped =
     ['korter', 'ss', 'myhome'].includes(provider) && /^\d{1,12}$/.test(id);
+  const isLocal = provider === 'local' && /^[0-9a-z]{15,30}$/i.test(id);
 
   // Cache-eligible fetch (fresh=false). Never let it hold the HTML hostage:
   // race the scrape against a hard cap and fall back to the client path.
   let initialDetail = null as Awaited<
     ReturnType<typeof fetchDetailCached>
   >['payload'] | null;
-  if (valid) {
+  if (isLocal) {
+    // Owner ads come straight from the DB — instant, no cap race.
+    try {
+      initialDetail = await fetchLocalDetail(id);
+    } catch {
+      initialDetail = null; // 404 state renders client-side
+    }
+  } else if (validScraped) {
     try {
       const job = fetchDetailCached(provider as 'korter' | 'ss' | 'myhome', id, {
         hint: urlHint,
+        deal: dealParam,
       });
       const cap = new Promise<null>((resolve) =>
         setTimeout(() => resolve(null), SSR_FETCH_CAP_MS),

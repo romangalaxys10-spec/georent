@@ -21,6 +21,7 @@ import { FiltersPanel, DEFAULT_FILTERS, type FiltersState } from '@/components/r
 import { HeroStats } from '@/components/radar/stat-chips';
 import { ExploreView } from '@/components/radar/explore-view';
 import { AlertsSection } from '@/components/radar/alerts-section';
+import { LocalAdsSection } from '@/components/radar/local-ads-section';
 import { AlertDialogForm } from '@/components/radar/alert-dialog-form';
 import { DemoRadarRuntime } from '@/components/radar/demo-runtime';
 
@@ -51,6 +52,9 @@ export default function Home() {
           <ExploreView value={filters} onChange={setFilters} />
         </main>
       </div>
+
+      {/* Local ads — owner dashboard / signup entry (full width below feed) */}
+      <LocalAdsSection />
 
       {/* Mobile: filters collapse into a bottom sheet behind a sticky pill */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

@@ -647,6 +647,10 @@ async function boot(): Promise<void> {
   void scanCycle() // immediate first scan
   // Safety-net second boot scan in case the first raced Prisma init.
   g.__scannerBootTimer = setTimeout(() => void scanCycle(), 5_000)
+
+  // Telegram pairing poller (no-op unless TELEGRAM_BOT_TOKEN is set).
+  const { startTelegramPoller } = await import('./telegram-poller')
+  startTelegramPoller()
 }
 
 function shutdown(signal: string): void {

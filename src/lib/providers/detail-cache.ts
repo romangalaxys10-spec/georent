@@ -91,7 +91,7 @@ export function patchDetailCache(
 export async function fetchDetailCached(
   provider: 'korter' | 'ss' | 'myhome',
   id: string,
-  opts: { hint?: string; fresh?: boolean } = {},
+  opts: { hint?: string; fresh?: boolean; deal?: 'buy' | 'rent' } = {},
 ): Promise<CachedDetail & { fromCache: boolean; stale: boolean }> {
   const key = cacheKey(provider, id);
   const hit = cache.get(key);
@@ -108,7 +108,7 @@ export async function fetchDetailCached(
 
   const job = (async (): Promise<CachedDetail> => {
     const { fetchUnifiedDetail } = await import('./index');
-    const payload = await fetchUnifiedDetail(provider, id, opts.hint);
+    const payload = await fetchUnifiedDetail(provider, id, opts.hint, opts.deal);
     const entry: CacheEntry = { payload, storedAt: Date.now(), hint: opts.hint };
     cache.set(key, entry);
     prune();

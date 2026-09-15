@@ -52,6 +52,7 @@ const isAbort = (err: unknown): boolean =>
 function buildUrl(f: FiltersState, offset: number): string {
   const sp = new URLSearchParams();
   sp.set('cityId', String(f.cityId));
+  sp.set('deal', f.deal);
   if (f.districts.length > 0) sp.set('districts', f.districts.join(','));
   if (f.rooms.length > 0) sp.set('rooms', f.rooms.join(','));
   if (f.bedrooms.length > 0) sp.set('bedrooms', f.bedrooms.join(','));
@@ -229,13 +230,40 @@ export function ExploreView({
 
   return (
     <section className="flex flex-col gap-4" aria-busy={loading}>
-      {/* Toolbar: view toggle + live status + sort.
-          Mobile: toggle+sort share row 1, the live strip takes row 2.
-          lg: original single row — toggle · status · sort. */}
+      {/* Toolbar: deal toggle + view toggle + live status + sort.
+          Mobile: deal · view · sort share row 1, the live strip takes row 2.
+          lg: deal · view · status · sort. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* List/Map segmented toggle */}
+        {/* Buy/Rent segmented toggle — the primary search axis */}
         <div
           className="order-1 flex h-9 items-center rounded-md border border-border bg-raised p-0.5"
+          role="radiogroup"
+          aria-label={t('search.dealTitle')}
+        >
+          {(
+            [
+              { id: 'buy' as const, label: t('search.dealBuy') },
+              { id: 'rent' as const, label: t('search.dealRent') },
+            ]
+          ).map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={value.deal === id}
+              onClick={() => onChange({ ...value, deal: id })}
+              className={`flex h-8 items-center gap-1.5 rounded px-3 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                value.deal === id ? 'bg-signal text-[#0B0E0C]' : 'text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* List/Map segmented toggle */}
+        <div
+          className="order-2 flex h-9 items-center rounded-md border border-border bg-raised p-0.5 lg:order-1 lg:ms-3"
           role="tablist"
           aria-label={t('sources.viewToggle')}
         >
@@ -267,7 +295,7 @@ export function ExploreView({
         >
           <SelectTrigger
             aria-label={t('filters.sort')}
-            className="order-2 h-9 w-[150px] rounded-md border-border bg-raised font-mono text-[12px] uppercase tracking-[0.06em] text-muted focus-visible:ring-ring/50 sm:w-[170px] lg:order-3 lg:w-[190px]"
+            className="order-3 h-9 w-[150px] rounded-md border-border bg-raised font-mono text-[12px] uppercase tracking-[0.06em] text-muted focus-visible:ring-ring/50 sm:w-[170px] lg:order-4 lg:w-[190px]"
           >
             <SelectValue />
           </SelectTrigger>
@@ -285,7 +313,7 @@ export function ExploreView({
         </Select>
 
         {/* Live search status */}
-        <div className="order-3 flex min-w-0 w-full items-center justify-center gap-2 lg:order-2 lg:w-auto lg:flex-1 lg:px-2">
+        <div className="order-4 flex min-w-0 w-full items-center justify-center gap-2 lg:order-3 lg:w-auto lg:flex-1 lg:px-2">
           <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
             <span aria-hidden className="size-[6px] animate-pulse-dot rounded-full bg-signal" />
             {t('sources.live')}

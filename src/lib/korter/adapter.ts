@@ -125,7 +125,8 @@ export async function fetchCards(filters: SearchFilters): Promise<CardFetchResul
 
 async function fetchCardsViaApi(filters: SearchFilters): Promise<KorterListing[]> {
   const qs = buildFilterParams(filters, false)
-  const url = `${KORTER_BASE}/pyapi/apartment/cards/sale?${qs.toString()}`
+  const segment = filters.deal === 'rent' ? 'rent' : 'sale'
+  const url = `${KORTER_BASE}/pyapi/apartment/cards/${segment}?${qs.toString()}`
   const res = await fetch(url, {
     headers: JSON_HEADERS,
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
@@ -148,7 +149,8 @@ async function fetchCardsViaApi(filters: SearchFilters): Promise<KorterListing[]
 async function fetchCardsViaSsr(filters: SearchFilters): Promise<KorterListing[]> {
   const slug = CITY_SLUGS[filters.cityId] ?? 'tbilisi'
   const qs = buildFilterParams(filters, true)
-  const url = `${KORTER_BASE}/en/apartments-for-sale-${slug}?${qs.toString()}`
+  const kind = filters.deal === 'rent' ? 'rent' : 'sale'
+  const url = `${KORTER_BASE}/en/apartments-for-${kind}-${slug}?${qs.toString()}`
   const res = await fetch(url, {
     headers: HTML_HEADERS,
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
@@ -220,9 +222,10 @@ export function extractInitialState(html: string): unknown {
  * ?property_category=flat&locale=en-US&main_geo_object_id={cityId}
  * Returns [{id, name, link}] from data.childrenGeoObjects (nominative as name).
  */
-export async function fetchDistricts(cityId: number): Promise<KorterDistrict[]> {
+export async function fetchDistricts(cityId: number, deal: 'buy' | 'rent' = 'buy'): Promise<KorterDistrict[]> {
+  const segment = deal === 'rent' ? 'rent' : 'sale'
   const url =
-    `${KORTER_BASE}/pyapi/apartment/filters/geo-objects/sale` +
+    `${KORTER_BASE}/pyapi/apartment/filters/geo-objects/${segment}` +
     `?property_category=flat&locale=en-US&main_geo_object_id=${encodeURIComponent(String(cityId))}`
   const res = await fetch(url, {
     headers: JSON_HEADERS,

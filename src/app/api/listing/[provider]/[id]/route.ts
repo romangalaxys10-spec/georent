@@ -20,7 +20,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { fetchDetailCached, patchDetailCache } from '@/lib/providers/detail-cache'
-import type { UnifiedDetail } from '@/lib/providers/detail-cache'
+import type { UnifiedDetail } from '@/lib/providers/types'
 
 const VALID_PROVIDERS = new Set(['korter', 'ss', 'myhome'])
 
@@ -130,6 +130,21 @@ export async function GET(
 ) {
   try {
     const { provider, id } = await context.params
+
+    // Local owner ads: served from the DB, no external sync — always live.
+    if (provider === 'local') {
+      if (!/^[0-9a-z]{15,30}$/i.test(id)) {
+        return NextResponse.json({ error: 'invalid id' }, { status: 400 })
+      }
+      const { fetchLocalDetail, bumpLocalViews } = await import('@/lib/local-ads')
+      const detail = await fetchLocalDetail(id)
+      bumpLocalViews(id)
+      return NextResponse.json(
+        { ...detail, tracked: undefined, cached: false, stale: false },
+        { headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
     if (!VALID_PROVIDERS.has(provider)) {
       return NextResponse.json({ error: 'unknown provider' }, { status: 400 })
     }
@@ -139,11 +154,12 @@ export async function GET(
     const params = new URL(request.url).searchParams
     const urlHint = params.get('url') ?? undefined
     const fresh = params.get('fresh') === '1'
+    const deal = params.get('deal') === 'rent' ? ('rent' as const) : ('buy' as const)
 
     const { payload, fromCache, stale } = await fetchDetailCached(
       provider as 'korter' | 'ss' | 'myhome',
       id,
-      { hint: urlHint, fresh },
+      { hint: urlHint, fresh, deal },
     )
 
     // Persist price-drop tracking only when the source was actually hit;

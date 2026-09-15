@@ -40,7 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
 .claude
 .z-ai-config
 *.log
@@ -50,6 +49,9 @@ test
 prompt
 
 server.log
+
+# user-pasted uploads (never ship user photos)
+/upload/
 # Skills directory
 
 # demo-mode build dir
