@@ -16,6 +16,11 @@ import { bindPairCode, botConfigured, sendPairConfirmation } from '../../src/lib
 const POLL_INTERVAL_MS = 12_000
 const TG_BASE = 'https://api.telegram.org'
 
+// Webhook mode owns delivery when TELEGRAM_WEBHOOK_SECRET is set — Telegram
+// refuses getUpdates with 409 while a webhook is registered, so the poller
+// must stay out of the way (no log spam, no double processing).
+const webhookMode = (): boolean => Boolean(process.env.TELEGRAM_WEBHOOK_SECRET)
+
 // The scanner runs with mini-services/scanner as cwd — bun auto-loads THAT
 // dir's .env, so the root .env (where the bot token lives) is parsed once here.
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -55,7 +60,7 @@ async function getUpdates(): Promise<TgUpdate[]> {
 
 /** One poll pass: process pending /start codes. */
 export async function telegramPollOnce(): Promise<number> {
-  if (!botConfigured()) return 0
+  if (!botConfigured() || webhookMode()) return 0
   try {
     const updates = await getUpdates()
     let bound = 0
@@ -85,6 +90,10 @@ export function startTelegramPoller(): void {
   const g = globalThis as unknown as { __tgPollerTimer?: ReturnType<typeof setInterval> }
   if (!botConfigured()) {
     console.log('[tg-poller] TELEGRAM_BOT_TOKEN not set — pairing via webhook or dashboard-only')
+    return
+  }
+  if (webhookMode()) {
+    console.log('[tg-poller] webhook mode active — getUpdates polling disabled')
     return
   }
   if (g.__tgPollerTimer) clearInterval(g.__tgPollerTimer)

@@ -420,7 +420,7 @@ export function LocalAdsSection() {
                 {t('ads.tgStep1')}{' '}
                 {pair.botUsername ? (
                   <a
-                    href={`https://t.me/${pair.botUsername}`}
+                    href={`https://t.me/${pair.botUsername}?start=${pair.pendingCode}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-signal underline decoration-signal/40 underline-offset-2"
