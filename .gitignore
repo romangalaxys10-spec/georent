@@ -69,3 +69,8 @@ server.log
 /.next-demo/
 /.next-build*/
 /.vercel/
+
+# skills directory (framework docs, not app code)
+/skills/
+/.zscripts/
+docs/screenshots/
